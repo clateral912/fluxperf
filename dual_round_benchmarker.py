@@ -4,18 +4,28 @@ import argparse
 import asyncio
 import csv
 import json
+import os
 import random
 import time
+from collections import deque
+from hashlib import sha256
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from aiohttp import web
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from statistics import mean, median, stdev
+from enum import Enum
 
 import aiohttp
 import yaml
 from tqdm import tqdm
 from prometheus_client.parser import text_string_to_metric_families
+
+
+class BenchmarkMode(Enum):
+    DUAL_ROUND = "dual_round"
+    MULTI_TURN = "multi_turn"
 
 
 @dataclass
@@ -32,6 +42,7 @@ class BenchmarkConfig:
     endpoint_url: str
     num_samples: List[int]
     concurrency_levels: List[int] = field(default_factory=lambda: [10])
+    mode: BenchmarkMode = BenchmarkMode.MULTI_TURN
     max_input_length: Optional[int] = None
     max_output_tokens: Optional[int] = None
     model_name: str = "gpt-3.5-turbo"
@@ -46,6 +57,24 @@ class BenchmarkConfig:
     reset_cache_url: Optional[str] = None
     reset_cache_between_rounds: bool = False
     reset_cache_between_concurrency: bool = False
+    debug: bool = False
+    debug_log_dir: Optional[Path] = None
+    max_context_tokens: Optional[int] = None
+
+
+@dataclass
+class RecipeStage:
+    name: str
+    concurrency_levels: List[int]
+    num_samples: List[int]
+    env: Dict[str, str] = field(default_factory=dict)
+
+
+@dataclass
+class Recipe:
+    global_config: Dict[str, Any]
+    stages: List[RecipeStage]
+    mock_server: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -64,6 +93,10 @@ class RequestMetrics:
     end_timestamp: float = 0.0
     error: Optional[str] = None
     meets_slo: bool = True
+    session_id: str = ""
+    turn_index: int = 0
+    context_tokens: int = 0
+    history_truncated: int = 0
 
 
 @dataclass
@@ -118,6 +151,56 @@ class RoundMetrics:
     goodput_request_rate: float = 0.0
     goodput_token_rate: float = 0.0
     prometheus_metrics: Dict[str, Dict[str, float]] = field(default_factory=dict)
+    stage_name: Optional[str] = None
+    concurrency: Optional[int] = None
+
+
+def count_tokens(text: str) -> int:
+    if not text:
+        return 0
+    return len(text.strip().split())
+
+
+@dataclass
+class SessionData:
+    session_id: str
+    user_messages: List[str]
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+class ConversationHistory:
+    def __init__(self, max_tokens: Optional[int] = None):
+        self.max_tokens = max_tokens
+        self.messages: deque[Dict[str, str]] = deque()
+
+    def _message_tokens(self, message: Dict[str, str]) -> int:
+        return count_tokens(message.get("content", ""))
+
+    def _total_tokens(self) -> int:
+        return sum(self._message_tokens(msg) for msg in self.messages)
+
+    def _truncate_if_needed(self) -> int:
+        if self.max_tokens is None:
+            return 0
+        truncated = 0
+        while self._total_tokens() > self.max_tokens and len(self.messages) > 1:
+            self.messages.popleft()
+            truncated += 1
+        return truncated
+
+    def prepare_request(self, user_text: str) -> tuple[List[Dict[str, str]], int, int]:
+        self.messages.append({"role": "user", "content": user_text})
+        truncated = self._truncate_if_needed()
+        messages = list(self.messages)
+        context_tokens = sum(self._message_tokens(msg) for msg in messages)
+        return messages, context_tokens, truncated
+
+    def append_assistant(self, assistant_text: str) -> int:
+        self.messages.append({"role": "assistant", "content": assistant_text})
+        return self._truncate_if_needed()
+
+    def reset(self):
+        self.messages.clear()
 
 
 class DatasetLoader:
@@ -150,6 +233,15 @@ class DatasetLoader:
         if len(text) > max_length:
             return text[:max_length]
         return text
+
+    @staticmethod
+    def is_multi_turn_entry(entry: Dict[str, Any]) -> bool:
+        if isinstance(entry.get("user_messages"), list):
+            return True
+        messages = entry.get("messages")
+        if isinstance(messages, list) and all(isinstance(m, dict) for m in messages):
+            return True
+        return False
 
 
 class SLOLoader:
@@ -198,6 +290,102 @@ class SLOLoader:
             return False
         
         return True
+
+
+class RecipeLoader:
+    @staticmethod
+    def load_recipe(recipe_file: Path) -> Recipe:
+        if not recipe_file.exists():
+            raise ValueError(f"Recipe 文件不存在: {recipe_file}")
+        
+        with open(recipe_file, 'r', encoding='utf-8') as f:
+            data = yaml.safe_load(f)
+        
+        if not isinstance(data, dict):
+            raise ValueError("Recipe 文件格式错误: 根元素必须是字典")
+        
+        global_config = data.get('global', {})
+        if not isinstance(global_config, dict):
+            raise ValueError("Recipe 文件格式错误: 'global' 必须是字典")
+        
+        stages_data = data.get('stages', [])
+        if not isinstance(stages_data, list):
+            raise ValueError("Recipe 文件格式错误: 'stages' 必须是列表")
+        
+        stages = []
+        for idx, stage_data in enumerate(stages_data):
+            if not isinstance(stage_data, dict):
+                raise ValueError(f"Recipe 文件格式错误: stage {idx} 必须是字典")
+            
+            name = stage_data.get('name', f'Stage {idx + 1}')
+            concurrency_levels = stage_data.get('concurrency_levels', [])
+            num_samples = stage_data.get('num_samples', [])
+            env = stage_data.get('env', {})
+            
+            if not isinstance(concurrency_levels, list):
+                raise ValueError(f"Recipe 文件格式错误: stage '{name}' 的 concurrency_levels 必须是列表")
+            if not isinstance(num_samples, list):
+                raise ValueError(f"Recipe 文件格式错误: stage '{name}' 的 num_samples 必须是列表")
+            if not isinstance(env, dict):
+                raise ValueError(f"Recipe 文件格式错误: stage '{name}' 的 env 必须是字典")
+            
+            stages.append(RecipeStage(
+                name=name,
+                concurrency_levels=concurrency_levels,
+                num_samples=num_samples,
+                env=env
+            ))
+        
+        mock_server = data.get('mock_server')
+        
+        return Recipe(
+            global_config=global_config,
+            stages=stages,
+            mock_server=mock_server
+        )
+    
+    @staticmethod
+    def create_config_from_recipe(recipe: Recipe, stage: RecipeStage) -> BenchmarkConfig:
+        g = recipe.global_config
+        
+        mode_str = g.get('mode', 'multi_turn')
+        try:
+            mode = BenchmarkMode(mode_str)
+        except ValueError:
+            raise ValueError(f"不支持的模式: {mode_str}. 支持的模式: dual_round, multi_turn")
+        
+        dataset_path = Path(g.get('dataset'))
+        if not dataset_path:
+            raise ValueError("Recipe 中缺少 dataset 配置")
+        
+        endpoint = g.get('endpoint')
+        if not endpoint and not (recipe.mock_server and recipe.mock_server.get('enabled')):
+            raise ValueError("Recipe 中缺少 endpoint 配置，且未启用 mock_server")
+        
+        return BenchmarkConfig(
+            dataset_path=dataset_path,
+            endpoint_url=endpoint or "",
+            num_samples=stage.num_samples,
+            concurrency_levels=stage.concurrency_levels,
+            mode=mode,
+            max_input_length=g.get('max_input_length'),
+            max_output_tokens=g.get('max_output_tokens'),
+            model_name=g.get('model', 'gpt-3.5-turbo'),
+            api_key=g.get('api_key'),
+            timeout=g.get('timeout', 300),
+            shuffle_round2=g.get('shuffle_round2', True),
+            slo_file=Path(g['slo_file']) if g.get('slo_file') else None,
+            output_dir=Path(g.get('output_dir', 'benchmark_results')),
+            prometheus_url=g.get('prometheus_url'),
+            prometheus_metrics=g.get('prometheus_metrics', []),
+            save_requests=g.get('save_requests', False),
+            reset_cache_url=g.get('reset_cache_url'),
+            reset_cache_between_rounds=g.get('reset_cache_between_rounds', False),
+            reset_cache_between_concurrency=g.get('reset_cache_between_concurrency', False),
+            debug=g.get('debug', False),
+            debug_log_dir=Path(g['debug_log_dir']) if g.get('debug_log_dir') else None,
+            max_context_tokens=g.get('max_context_tokens')
+        )
 
 
 class PrometheusCollector:
@@ -272,6 +460,8 @@ class OpenAIClient:
         self.concurrency = concurrency
         self.session: Optional[aiohttp.ClientSession] = None
         self.requests_log = []
+        self.debug_entries: List[Dict[str, Any]] = []
+        self.debug_metadata: Dict[str, Any] = {}
 
     async def __aenter__(self):
         headers = {
@@ -295,6 +485,19 @@ class OpenAIClient:
             file_size = log_file.stat().st_size
             print(f"  → 请求日志已保存: {log_file} ({file_size / 1024:.2f} KiB)")
 
+        if self.config.debug and self.debug_entries:
+            log_dir = self.config.debug_log_dir or Path("debug_logs")
+            log_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            log_file = log_dir / f"debug_round{self.round_num}_conc{self.concurrency}_{timestamp}.json"
+            debug_payload = {
+                "metadata": self.debug_metadata,
+                "entries": self.debug_entries
+            }
+            with open(log_file, "w", encoding="utf-8") as f:
+                json.dump(debug_payload, f, ensure_ascii=False, indent=2)
+            print(f"  → 调试日志已保存: {log_file}")
+
         if self.session:
             await self.session.close()
 
@@ -302,37 +505,52 @@ class OpenAIClient:
         self,
         request_id: str,
         round_num: int,
-        text: str
+        messages: Sequence[Dict[str, str]],
+        session_id: str,
+        turn_index: int
     ) -> RequestMetrics:
         payload = {
             "model": self.config.model_name,
-            "messages": [
-                {"role": "user", "content": text}
-            ],
-            "stream": True
+            "messages": list(messages),
+            "stream": True,
+            "metadata": {
+                "session_id": session_id,
+                "turn_index": turn_index,
+                "request_id": request_id
+            }
         }
 
         if self.config.max_output_tokens:
             payload["max_tokens"] = self.config.max_output_tokens
 
-        if self.config.save_requests:
-            self.requests_log.append({
+        if self.config.save_requests or self.config.debug:
+            entry = {
                 "request_id": request_id,
                 "round": round_num,
                 "timestamp": time.time(),
-                "payload": payload
-            })
+                "payload": payload,
+                "session_id": session_id,
+                "turn_index": turn_index
+            }
+            if self.config.save_requests:
+                self.requests_log.append(entry)
+            if self.config.debug:
+                self.debug_entries.append(entry)
 
+        user_text = messages[-1]["content"] if messages else ""
         metrics = RequestMetrics(
             request_id=request_id,
             round_num=round_num,
-            input_text=text,
+            input_text=user_text,
             output_text="",
-            input_tokens=len(text.split()),
+            input_tokens=count_tokens(user_text),
             output_tokens=0,
             time_to_first_token=0.0,
             start_timestamp=time.time(),
-            end_timestamp=0.0
+            end_timestamp=0.0,
+            session_id=session_id,
+            turn_index=turn_index,
+            context_tokens=sum(count_tokens(msg["content"]) for msg in messages)
         )
 
         try:
@@ -345,39 +563,43 @@ class OpenAIClient:
                 self.config.endpoint_url,
                 json=payload
             ) as response:
-                async for line in response.content:
-                    current_time = time.time()
-                    
-                    line = line.decode('utf-8').strip()
-                    if not line or line == "data: [DONE]":
-                        continue
-                    
-                    if line.startswith("data: "):
-                        line = line[6:]
-                    
-                    try:
-                        chunk = json.loads(line)
-                        if 'choices' in chunk and len(chunk['choices']) > 0:
-                            delta = chunk['choices'][0].get('delta', {})
-                            content = delta.get('content', '')
-                            
-                            if content:
-                                if not first_token_received:
-                                    metrics.time_to_first_token = current_time - start_time
-                                    first_token_received = True
-                                else:
-                                    itl = (current_time - last_token_time) * 1000
-                                    metrics.inter_token_latencies.append(itl)
+                buffer = b''
+                async for chunk_bytes in response.content.iter_any():
+                    buffer += chunk_bytes
+                    while b'\n' in buffer:
+                        line_bytes, buffer = buffer.split(b'\n', 1)
+                        current_time = time.time()
+                        
+                        line = line_bytes.decode('utf-8').strip()
+                        if not line or line == "data: [DONE]":
+                            continue
+                        
+                        if line.startswith("data: "):
+                            line = line[6:]
+                        
+                        try:
+                            chunk = json.loads(line)
+                            if 'choices' in chunk and len(chunk['choices']) > 0:
+                                delta = chunk['choices'][0].get('delta', {})
+                                content = delta.get('content', '')
                                 
-                                output_chunks.append(content)
-                                last_token_time = current_time
-                    except json.JSONDecodeError:
-                        continue
+                                if content:
+                                    if not first_token_received:
+                                        metrics.time_to_first_token = current_time - start_time
+                                        first_token_received = True
+                                    else:
+                                        itl = (current_time - last_token_time) * 1000
+                                        metrics.inter_token_latencies.append(itl)
+                                    
+                                    output_chunks.append(content)
+                                    last_token_time = current_time
+                        except json.JSONDecodeError:
+                            continue
 
             end_time = time.time()
             metrics.end_timestamp = end_time
             metrics.output_text = ''.join(output_chunks)
-            metrics.output_tokens = len(metrics.output_text.split())
+            metrics.output_tokens = count_tokens(metrics.output_text)
             metrics.total_latency = end_time - start_time
             
             if metrics.output_tokens > 0 and metrics.total_latency > 0:
@@ -389,12 +611,142 @@ class OpenAIClient:
 
         return metrics
 
+    def set_debug_metadata(self, metadata: Dict[str, Any]):
+        if self.config.debug:
+            self.debug_metadata = metadata
+
 
 class BenchmarkRunner:
     def __init__(self, config: BenchmarkConfig, slo: Optional[SLOConstraints] = None):
         self.config = config
         self.slo = slo
         self.results: List[RequestMetrics] = []
+        self.conversation_state: Dict[str, ConversationHistory] = {}
+
+    def _reset_conversation_state(self, sessions: List[SessionData]):
+        self.conversation_state = {
+            session.session_id: ConversationHistory(self.config.max_context_tokens)
+            for session in sessions
+        }
+
+    def _sanitize_user_message(self, text: Any) -> str:
+        if not isinstance(text, str):
+            text = str(text)
+        text = text.strip()
+        if not text:
+            return ""
+        return DatasetLoader.truncate_text(text, self.config.max_input_length)
+
+    def _extract_user_messages_from_entry(self, entry: Dict[str, Any]) -> List[str]:
+        if isinstance(entry.get("user_messages"), list):
+            return [msg for msg in entry["user_messages"] if isinstance(msg, str)]
+
+        conversations = entry.get("conversations")
+        if isinstance(conversations, list):
+            collected = []
+            for message in conversations:
+                if not isinstance(message, dict):
+                    continue
+                sender = message.get("from") or message.get("role")
+                if sender in {"human", "user"}:
+                    value = message.get("value") or message.get("content")
+                    if isinstance(value, str):
+                        collected.append(value)
+            if collected:
+                return collected
+
+        messages = entry.get("messages")
+        if isinstance(messages, list):
+            collected = []
+            for message in messages:
+                if not isinstance(message, dict):
+                    continue
+                role = message.get("role") or message.get("from")
+                if role in {"user", "human"}:
+                    content = message.get("content")
+                    if isinstance(content, str):
+                        collected.append(content)
+                    elif isinstance(content, list):
+                        parts = []
+                        for part in content:
+                            if isinstance(part, dict) and part.get("type") == "text" and isinstance(part.get("text"), str):
+                                parts.append(part["text"])
+                        if parts:
+                            collected.append("\n".join(parts))
+            if collected:
+                return collected
+
+        text = self._extract_text(entry)
+        if text:
+            return [text]
+        return []
+
+    def _entry_to_session(self, entry: Any, index: int) -> Optional[SessionData]:
+        if isinstance(entry, SessionData):
+            sanitized = [self._sanitize_user_message(msg) for msg in entry.user_messages]
+            sanitized = [msg for msg in sanitized if msg]
+            if not sanitized:
+                return None
+            return SessionData(session_id=entry.session_id, user_messages=sanitized, metadata=entry.metadata)
+
+        if isinstance(entry, dict):
+            session_id = ""
+            if isinstance(entry.get("session_id"), str):
+                session_id = entry["session_id"].strip()
+            elif isinstance(entry.get("id"), str):
+                session_id = entry["id"].strip()
+            if not session_id:
+                session_id = f"session_{index}"
+            user_messages = [self._sanitize_user_message(msg) for msg in self._extract_user_messages_from_entry(entry)]
+            user_messages = [msg for msg in user_messages if msg]
+            if not user_messages:
+                return None
+            return SessionData(session_id=session_id, user_messages=user_messages, metadata=entry)
+
+        sanitized = self._sanitize_user_message(entry)
+        if not sanitized:
+            return None
+        return SessionData(session_id=f"session_{index}", user_messages=[sanitized], metadata={})
+
+    def _normalize_sessions(self, entries: List[Any]) -> List[SessionData]:
+        sessions: List[SessionData] = []
+        seen_ids: Dict[str, int] = {}
+        for idx, entry in enumerate(entries):
+            session = self._entry_to_session(entry, idx)
+            if session is None:
+                continue
+            base_id = session.session_id or f"session_{idx}"
+            if base_id in seen_ids:
+                seen_ids[base_id] += 1
+                session.session_id = f"{base_id}_{seen_ids[base_id]}"
+            else:
+                seen_ids[base_id] = 0
+                session.session_id = base_id
+            sessions.append(session)
+        return sessions
+
+    def _entries_to_single_turn_sessions(self, entries: List[Any]) -> List[SessionData]:
+        """将数据集条目转换为单轮会话 (用于 dual_round 模式)"""
+        sessions = []
+        for idx, entry in enumerate(entries):
+            text = self._extract_text(entry)
+            sanitized = self._sanitize_user_message(text)
+            if not sanitized:
+                continue
+            
+            session_id = f"session_{idx}"
+            if isinstance(entry, dict) and 'id' in entry:
+                session_id = str(entry['id'])
+            
+            sessions.append(SessionData(
+                session_id=session_id,
+                user_messages=[sanitized],
+                metadata=entry if isinstance(entry, dict) else {}
+            ))
+        return sessions
+
+    def _total_turns(self, sessions: List[SessionData]) -> int:
+        return sum(len(session.user_messages) for session in sessions)
 
     async def reset_kvcache(self, reason: str = ""):
         """重置 vLLM KVCache"""
@@ -419,13 +771,27 @@ class BenchmarkRunner:
         self,
         round_num: int,
         concurrency: int,
-        entries: List[Dict[str, Any]]
+        sessions: List[SessionData]
     ) -> tuple[List[RequestMetrics], Dict[str, List[float]]]:
+        self._reset_conversation_state(sessions)
+
+        turns: List[tuple[str, int, str]] = []
+        for session in sessions:
+            for turn_index, message in enumerate(session.user_messages):
+                turns.append((session.session_id, turn_index, message))
+
+        total_count = len(turns)
+        if total_count == 0:
+            print("警告: 会话中未找到用户发言，跳过该轮\n")
+            return [], {}
+
+        order_map: Dict[Tuple[str, int], int] = {
+            (session_id, turn_index): idx
+            for idx, (session_id, turn_index, _) in enumerate(turns)
+        }
+
         round_start_time = time.time()
         semaphore = asyncio.Semaphore(concurrency)
-
-        completed_count = 0
-        total_count = len(entries)
         pbar = tqdm(
             total=total_count,
             desc=f"第{round_num}轮 (并发:{concurrency})",
@@ -433,8 +799,9 @@ class BenchmarkRunner:
             bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}'
         )
 
-        active_requests = {}
+        active_requests: Dict[str, float] = {}
         status_lock = asyncio.Lock()
+        results: Dict[int, RequestMetrics] = {}
 
         async def update_status():
             while True:
@@ -446,24 +813,6 @@ class BenchmarkRunner:
                         pbar.set_postfix_str(f"等待: {oldest_req_id} ({wait_time:.1f}s)", refresh=True)
                     else:
                         pbar.set_postfix_str("", refresh=False)
-
-        async def bounded_request(idx: int, entry: Dict[str, Any]) -> RequestMetrics:
-            nonlocal completed_count
-            async with semaphore:
-                text = self._extract_text(entry)
-                request_id = f"round{round_num}_conc{concurrency}_req{idx}"
-
-                async with status_lock:
-                    active_requests[request_id] = time.time()
-
-                result = await client.send_completion_request(request_id, round_num, text)
-
-                async with status_lock:
-                    active_requests.pop(request_id, None)
-
-                completed_count += 1
-                pbar.update(1)
-                return result
 
         temp_config = BenchmarkConfig(
             dataset_path=self.config.dataset_path,
@@ -483,7 +832,10 @@ class BenchmarkRunner:
             save_requests=self.config.save_requests,
             reset_cache_url=self.config.reset_cache_url,
             reset_cache_between_rounds=self.config.reset_cache_between_rounds,
-            reset_cache_between_concurrency=self.config.reset_cache_between_concurrency
+            reset_cache_between_concurrency=self.config.reset_cache_between_concurrency,
+            debug=self.config.debug,
+            debug_log_dir=self.config.debug_log_dir,
+            max_context_tokens=self.config.max_context_tokens
         )
 
         prometheus_metrics = {}
@@ -497,6 +849,23 @@ class BenchmarkRunner:
             )
 
         async with OpenAIClient(temp_config, round_num, concurrency) as client:
+            debug_metadata = {
+                "round": round_num,
+                "concurrency": concurrency,
+                "total_sessions": len(sessions),
+                "total_turns": total_count,
+                "config": {
+                    "max_context_tokens": self.config.max_context_tokens,
+                    "max_input_length": self.config.max_input_length,
+                    "max_output_tokens": self.config.max_output_tokens,
+                    "endpoint": self.config.endpoint_url,
+                "shuffle_round2": self.config.shuffle_round2,
+                "save_requests": self.config.save_requests,
+                "debug": self.config.debug,
+                }
+            }
+            client.set_debug_metadata(debug_metadata)
+
             if prom_collector:
                 estimated_end_time = round_start_time + self.config.timeout * 2
                 prom_task = asyncio.create_task(
@@ -510,8 +879,61 @@ class BenchmarkRunner:
 
             status_task = asyncio.create_task(update_status())
 
-            tasks = [bounded_request(i, entry) for i, entry in enumerate(entries)]
-            round_results = await asyncio.gather(*tasks)
+            async def process_session(session: SessionData):
+                history = self.conversation_state[session.session_id]
+                for turn_index, user_text in enumerate(session.user_messages):
+                    turn_key = (session.session_id, turn_index)
+                    if turn_key not in order_map:
+                        continue
+                    turn_order = order_map[turn_key]
+                    sanitized_user = self._sanitize_user_message(user_text)
+                    if not sanitized_user:
+                        metrics = RequestMetrics(
+                            request_id=f"round{round_num}_conc{concurrency}_{session.session_id}_turn{turn_index}",
+                            round_num=round_num,
+                            input_text="",
+                            output_text="",
+                            input_tokens=0,
+                            output_tokens=0,
+                            time_to_first_token=0.0,
+                            start_timestamp=time.time(),
+                            end_timestamp=time.time(),
+                            error="空输入",
+                            session_id=session.session_id,
+                            turn_index=turn_index,
+                            context_tokens=history._total_tokens(),
+                            history_truncated=0
+                        )
+                        results[turn_order] = metrics
+                        pbar.update(1)
+                        continue
+
+                    messages, context_tokens, truncated = history.prepare_request(sanitized_user)
+                    request_id = f"round{round_num}_conc{concurrency}_{session.session_id}_turn{turn_index}"
+
+                    async with semaphore:
+                        async with status_lock:
+                            active_requests[request_id] = time.time()
+                        result = await client.send_completion_request(
+                            request_id,
+                            round_num,
+                            messages,
+                            session_id=session.session_id,
+                            turn_index=turn_index
+                        )
+                        async with status_lock:
+                            active_requests.pop(request_id, None)
+
+                    assistant_truncated = 0
+                    if not result.error and result.output_text:
+                        assistant_truncated = history.append_assistant(result.output_text)
+                    result.context_tokens = context_tokens
+                    result.history_truncated = truncated + assistant_truncated
+                    results[turn_order] = result
+                    pbar.update(1)
+
+            session_tasks = [asyncio.create_task(process_session(session)) for session in sessions]
+            await asyncio.gather(*session_tasks)
 
             status_task.cancel()
             try:
@@ -536,6 +958,7 @@ class BenchmarkRunner:
                     round_end_time
                 )
 
+        round_results = [results[i] for i in range(total_count)]
         for result in round_results:
             result.meets_slo = SLOLoader.check_slo(result, self.slo)
 
@@ -563,7 +986,8 @@ class BenchmarkRunner:
 
     async def run(self) -> Dict[int, tuple[List[RequestMetrics], List[RequestMetrics], Dict[str, List[float]], Dict[str, List[float]]]]:
         dataset = DatasetLoader.load_dataset(self.config.dataset_path)
-        print(f"加载数据集: {len(dataset)} 条记录\n")
+        print(f"加载数据集: {len(dataset)} 条记录")
+        print(f"模式: {self.config.mode.value}\n")
 
         all_results = {}
 
@@ -571,7 +995,13 @@ class BenchmarkRunner:
             current_num_samples = self.config.num_samples[idx]
 
             sampled_entries = DatasetLoader.sample_entries(dataset, current_num_samples)
-            print(f"并发层级 {concurrency}: 随机抽取 {len(sampled_entries)} 条记录\n")
+            
+            if self.config.mode == BenchmarkMode.DUAL_ROUND:
+                sessions = self._entries_to_single_turn_sessions(sampled_entries)
+            else:
+                sessions = self._normalize_sessions(sampled_entries)
+            total_turns = self._total_turns(sessions)
+            print(f"并发层级 {concurrency}: 选取 {len(sessions)} 个会话，总轮次 {total_turns}\n")
 
             if idx > 0 and self.config.reset_cache_between_concurrency:
                 await self.reset_kvcache(f"并发层级切换: {self.config.concurrency_levels[idx-1]} -> {concurrency}")
@@ -580,24 +1010,113 @@ class BenchmarkRunner:
             print(f"开始测试并发层级: {concurrency}")
             print(f"{'='*60}\n")
 
-            round1_results, round1_prom_metrics = await self.run_round(1, concurrency, sampled_entries)
+            round1_results, round1_prom_metrics = await self.run_round(1, concurrency, sessions)
 
             if self.config.reset_cache_between_rounds:
                 await self.reset_kvcache(f"并发 {concurrency}: 第1轮 -> 第2轮")
 
             if self.config.shuffle_round2:
-                shuffled_entries = sampled_entries.copy()
-                random.shuffle(shuffled_entries)
+                shuffled_sessions = sessions.copy()
+                random.shuffle(shuffled_sessions)
             else:
-                shuffled_entries = sampled_entries
+                shuffled_sessions = sessions
 
-            round2_results, round2_prom_metrics = await self.run_round(2, concurrency, shuffled_entries)
+            round2_results, round2_prom_metrics = await self.run_round(2, concurrency, shuffled_sessions)
 
             all_results[concurrency] = (round1_results, round2_results, round1_prom_metrics, round2_prom_metrics)
 
         await self.reset_kvcache("所有评测任务完成")
 
         return all_results
+
+
+async def run_recipe_benchmark(recipe: Recipe):
+    """运行 Recipe 配置的多阶段测试"""
+    
+    # 启动 Mock Server (如果需要)
+    mock_task = None
+    shutdown_event = None
+    if recipe.mock_server and recipe.mock_server.get('enabled'):
+        from llm_mocker import run_server_until_cancelled
+        shutdown_event = asyncio.Event()
+        
+        host = recipe.mock_server.get('host', '127.0.0.1')
+        port = recipe.mock_server.get('port', 8765)
+        
+        mock_task = asyncio.create_task(
+            run_server_until_cancelled(host, port, shutdown_event)
+        )
+        print(f"Mock 服务已启动: http://{host}:{port}")
+        await asyncio.sleep(2)
+        
+        # 如果没有配置 endpoint，自动设置为 mock server
+        if not recipe.global_config.get('endpoint'):
+            recipe.global_config['endpoint'] = f"http://{host}:{port}/v1/chat/completions"
+    
+    all_stage_results = {}
+    
+    try:
+        for stage_idx, stage in enumerate(recipe.stages, 1):
+            print(f"\n{'='*60}")
+            print(f"Stage {stage_idx}/{len(recipe.stages)}: {stage.name}")
+            print(f"{'='*60}")
+            
+            # 保存当前环境变量
+            original_env = {}
+            for key, value in stage.env.items():
+                original_env[key] = os.environ.get(key)
+                os.environ[key] = str(value)
+                print(f"设置环境变量: {key}={value}")
+            
+            try:
+                # 创建配置
+                config = RecipeLoader.create_config_from_recipe(recipe, stage)
+                
+                # 加载 SLO
+                slo = None
+                if config.slo_file:
+                    slo = SLOLoader.load_slo(config.slo_file)
+                
+                # 打印配置信息
+                print(f"\n数据集: {config.dataset_path}")
+                print(f"Endpoint: {config.endpoint_url}")
+                print(f"模式: {config.mode.value}")
+                print(f"并发层级: {', '.join(map(str, config.concurrency_levels))}")
+                print(f"样本数: {', '.join(map(str, config.num_samples))}")
+                print(f"模型: {config.model_name}\n")
+                
+                # 运行测试
+                runner = BenchmarkRunner(config, slo)
+                stage_results = await runner.run()
+                
+                all_stage_results[f"stage_{stage_idx}_{stage.name}"] = stage_results
+                
+                # 分析并打印结果
+                for concurrency, (round1_results, round2_results, round1_prom, round2_prom) in stage_results.items():
+                    round1_metrics = MetricsAnalyzer.analyze_round(1, round1_results, round1_prom, stage.name, concurrency)
+                    round2_metrics = MetricsAnalyzer.analyze_round(2, round2_results, round2_prom, stage.name, concurrency)
+                    
+                    MetricsAnalyzer.print_metrics(concurrency, round1_metrics)
+                    MetricsAnalyzer.print_metrics(concurrency, round2_metrics)
+                
+            finally:
+                # 恢复环境变量
+                for key, original_value in original_env.items():
+                    if original_value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = original_value
+                print(f"\n环境变量已恢复")
+        
+        print(f"\n{'='*60}")
+        print(f"所有 {len(recipe.stages)} 个阶段已完成!")
+        print(f"{'='*60}")
+        
+    finally:
+        # 关闭 Mock Server
+        if mock_task and shutdown_event:
+            shutdown_event.set()
+            await mock_task
 
 
 class MetricsAnalyzer:
@@ -610,7 +1129,8 @@ class MetricsAnalyzer:
         return sorted_values[min(index, len(sorted_values) - 1)]
 
     @staticmethod
-    def analyze_round(round_num: int, results: List[RequestMetrics], prometheus_metrics: Dict[str, List[float]] = None) -> RoundMetrics:
+    def analyze_round(round_num: int, results: List[RequestMetrics], prometheus_metrics: Dict[str, List[float]] = None, 
+                     stage_name: Optional[str] = None, concurrency: Optional[int] = None) -> RoundMetrics:
         successful = [r for r in results if r.error is None]
         failed = [r for r in results if r.error is not None]
 
@@ -646,7 +1166,9 @@ class MetricsAnalyzer:
                 goodput_tokens=0,
                 goodput_request_rate=0.0,
                 goodput_token_rate=0.0,
-                prometheus_metrics=prom_stats
+                prometheus_metrics=prom_stats,
+                stage_name=stage_name,
+                concurrency=concurrency
             )
 
         ttft_values = [r.time_to_first_token * 1000 for r in successful if r.time_to_first_token > 0]
@@ -683,6 +1205,8 @@ class MetricsAnalyzer:
             total_requests=len(results),
             successful_requests=len(successful),
             failed_requests=len(failed),
+            stage_name=stage_name,
+            concurrency=concurrency,
             avg_ttft=mean(ttft_values) if ttft_values else 0,
             p50_ttft=median(ttft_values) if ttft_values else 0,
             p90_ttft=MetricsAnalyzer.calculate_percentile(ttft_values, 90),
@@ -880,7 +1404,11 @@ class MetricsAnalyzer:
 
         total_width = sum(col_widths) + len(col_widths) * 3 - 1
 
-        title = f"Dual Round Benchmarker | LLM Metrics (Concurrency: {concurrency}, Round: {metrics.round_num})"
+        # 根据是否有 stage_name 来决定标题
+        if metrics.stage_name:
+            title = f"{metrics.stage_name} - Round {metrics.round_num}"
+        else:
+            title = f"Dual Round Benchmarker | LLM Metrics (Concurrency: {concurrency}, Round: {metrics.round_num})"
         print(f"\n{title.center(total_width)}")
 
         top_border = "┏" + "┳".join("━" * (w + 2) for w in col_widths) + "┓"
@@ -1336,30 +1864,68 @@ class MetricsAnalyzer:
         print(f"参数已保存到: {params_path}")
 
 
+def add_cli_arguments(parser: argparse.ArgumentParser):
+    parser.add_argument(
+        "--mock-server",
+        action="store_true",
+        help="启动内置 Mock LLM 服务"
+    )
+    parser.add_argument(
+        "--mock-host",
+        type=str,
+        default="0.0.0.0",
+        help="Mock 服务监听地址 (默认 0.0.0.0)"
+    )
+    parser.add_argument(
+        "--mock-port",
+        type=int,
+        default=8001,
+        help="Mock 服务端口 (默认 8001)"
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="两轮压测工具 - 向 OpenAI 格式的 API 发送两轮相同的请求并收集性能指标"
     )
     
+    add_cli_arguments(parser)
+
+    parser.add_argument(
+        "--recipe",
+        type=Path,
+        default=None,
+        help="Recipe 配置文件路径 (YAML 格式)。使用此参数时，其他参数将被忽略"
+    )
+
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=['dual_round', 'multi_turn'],
+        default='multi_turn',
+        help="测试模式: dual_round (两轮单次请求) 或 multi_turn (多轮对话)"
+    )
+
     parser.add_argument(
         "--dataset",
         type=Path,
-        required=True,
+        required=False,
         help="数据集文件路径 (JSON 或 JSONL 格式)"
     )
     
     parser.add_argument(
         "--endpoint",
         type=str,
-        required=True,
-        help="OpenAI 格式的 API endpoint URL"
+        required=False,
+        default=None,
+        help="OpenAI 格式的 API endpoint URL (使用 --mock-server 时可选)"
     )
     
     parser.add_argument(
         "--num-samples",
         type=int,
         nargs='+',
-        required=True,
+        required=False,
         help="从数据集中随机抽取的样本数量。可指定多个值对应不同并发层级。当参数数量与 --concurrency 不匹配时，自动为每个并发层级设置为 2*concurrency"
     )
     
@@ -1473,7 +2039,50 @@ def main():
         help="在不同并发层级之间重置 KVCache"
     )
 
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="启用调试模式，保存详细的调试日志"
+    )
+
+    parser.add_argument(
+        "--debug-log-dir",
+        type=Path,
+        default=None,
+        help="调试日志目录 (默认: debug_logs)"
+    )
+
+    parser.add_argument(
+        "--max-context-tokens",
+        type=int,
+        default=None,
+        help="最大上下文tokens数量，超过时自动截断历史对话"
+    )
+
     args = parser.parse_args()
+    
+    # Recipe 模式
+    if args.recipe:
+        try:
+            recipe = RecipeLoader.load_recipe(args.recipe)
+            print(f"加载 Recipe: {args.recipe}")
+            print(f"包含 {len(recipe.stages)} 个测试阶段\n")
+            
+            asyncio.run(run_recipe_benchmark(recipe))
+            return
+        except Exception as e:
+            parser.error(f"加载 Recipe 失败: {e}")
+    
+    # 命令行模式验证
+    if not args.dataset:
+        parser.error("必须提供 --dataset 参数")
+    if not args.num_samples:
+        parser.error("必须提供 --num-samples 参数")
+    if not args.endpoint and not args.mock_server:
+        parser.error("必须提供 --endpoint 参数或启用 --mock-server")
+    
+    if args.mock_server and not args.endpoint:
+        args.endpoint = f"http://{args.mock_host}:{args.mock_port}/v1/chat/completions"
 
     num_samples_list = args.num_samples
     concurrency_levels = args.concurrency
@@ -1485,6 +2094,8 @@ def main():
         final_num_samples = [conc * 2 for conc in concurrency_levels]
         print(f"num_samples 参数数量与 concurrency 不匹配，使用默认规则 (2*concurrency): {final_num_samples}")
 
+    mode = BenchmarkMode(args.mode)
+    
     slo = None
     if args.slo_file:
         slo = SLOLoader.load_slo(args.slo_file)
@@ -1498,6 +2109,7 @@ def main():
         endpoint_url=args.endpoint,
         num_samples=final_num_samples,
         concurrency_levels=concurrency_levels,
+        mode=mode,
         max_input_length=args.max_input_length,
         max_output_tokens=args.max_output_tokens,
         model_name=args.model,
@@ -1511,7 +2123,10 @@ def main():
         save_requests=args.save_requests,
         reset_cache_url=args.reset_cache_url,
         reset_cache_between_rounds=args.reset_cache_between_rounds,
-        reset_cache_between_concurrency=args.reset_cache_between_concurrency
+        reset_cache_between_concurrency=args.reset_cache_between_concurrency,
+        debug=args.debug,
+        debug_log_dir=args.debug_log_dir,
+        max_context_tokens=args.max_context_tokens
     )
     
     print("="*60)
@@ -1548,8 +2163,28 @@ def main():
             print(f"  - 并发层级间重置: 是")
     print("="*60)
     
-    runner = BenchmarkRunner(config, slo)
-    all_raw_results = asyncio.run(runner.run())
+    async def run_benchmark():
+        mock_task = None
+        if args.mock_server:
+            from llm_mocker import run_server_until_cancelled
+            shutdown_event = asyncio.Event()
+            
+            mock_task = asyncio.create_task(
+                run_server_until_cancelled(args.mock_host, args.mock_port, shutdown_event)
+            )
+            print(f"Mock 服务已启动: http://{args.mock_host}:{args.mock_port}")
+            await asyncio.sleep(2)
+        
+        runner = BenchmarkRunner(config, slo)
+        all_raw_results = await runner.run()
+        
+        if mock_task:
+            shutdown_event.set()
+            await mock_task
+        
+        return all_raw_results
+    
+    all_raw_results = asyncio.run(run_benchmark())
     
     all_results = {}
     all_metrics_only = {}

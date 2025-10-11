@@ -11,6 +11,7 @@ import json
 
 PORT = 9999
 PROMETHEUS_PORT = 9998
+ROOT_DIR = Path(__file__).resolve().parent.parent
 
 
 class MockPrometheusHandler(http.server.BaseHTTPRequestHandler):
@@ -129,7 +130,7 @@ def run_test():
     print(f"✓ Mock OpenAI 服务器已启动在端口 {PORT}")
     
     print("\n[3/7] 检查测试数据文件...")
-    dataset_path = Path("example_dataset.json")
+    dataset_path = ROOT_DIR / "examples/example_dataset.json"
     if not dataset_path.exists():
         print(f"✗ 未找到数据集文件: {dataset_path}")
         return False
@@ -154,8 +155,8 @@ def run_test():
     
     cmd = [
         sys.executable,
-        "dual_round_benchmarker.py",
-        "--dataset", "example_dataset.json",
+        str(ROOT_DIR / "dual_round_benchmarker.py"),
+        "--dataset", str(dataset_path),
         "--endpoint", f"http://localhost:{PORT}/v1/chat/completions",
         "--num-samples", "3",
         "--concurrency", "2",

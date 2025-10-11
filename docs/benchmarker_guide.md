@@ -11,6 +11,7 @@
 - [SLO 配置](#slo-配置)
 - [Prometheus 集成](#prometheus-集成)
 - [故障排除](#故障排除)
+- [多轮对话与调试模式](#多轮对话与调试模式)
 
 ---
 
@@ -283,6 +284,63 @@ ITL (ms)
 ```
 
 ---
+
+## 多轮对话与调试模式
+
+### 多轮对话支持
+
+自 v2 起，工具支持基于 session 的多轮对话数据集。输入 JSONL 可包含以下结构：
+
+```json
+{"session_id": "s1", "user_messages": ["问题1", "问题2"]}
+{"conversations": [{"from": "human", "value": "hi"}, {"from": "gpt", "value": "hello"}, {"from": "human", "value": "how are you"}]}
+{"messages": [{"role": "user", "content": "问1"}, {"role": "assistant", "content": "答1"}, {"role": "user", "content": "问2"}]}
+```
+
+同一 session 会维护历史：
+1. 用户发问追加到对应会话历史
+2. 请求调用时携带历史 + 新问题
+3. 模型回复追加并根据 `--max-context-tokens` 从最早轮次截断
+
+### Token 截断策略
+
+- 仅在上下文 token 总数超过 `--max-context-tokens` 时生效
+- 截断从最早的问答轮开始删除，确保最新语境
+
+### 调试模式
+
+新增 `--debug` 与 `--debug-log-dir`，用于输出请求 payload、历史上下文、session 元数据。
+
+```
+python dual_round_benchmarker.py \
+  --dataset data/chat.jsonl \
+  --endpoint http://localhost:8001/v1/chat/completions \
+  --num-samples 4 \
+  --concurrency 2 \
+  --debug \
+  --debug-log-dir debug_logs
+```
+
+调试日志 JSON 包含：
+- `session_id` / `turn_index`
+- 全量请求消息列表
+- 当前上下文 token 数及截断次数
+
+### Mock 服务
+
+利用 `--mock-server` 启动内置 `llm_mocker.py`：
+
+```
+python dual_round_benchmarker.py \
+  --dataset examples/example_dataset.json \
+  --mock-server \
+  --mock-host 127.0.0.1 \
+  --mock-port 8765 \
+  --num-samples 4 \
+  --concurrency 2
+```
+
+Mock 输出包含 session/id 哈希，便于验证请求负载。
 
 ## 使用示例
 
