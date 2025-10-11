@@ -2,6 +2,35 @@
 
 一个用于测试 LLM API 服务性能的双轮压测工具，专门设计用于评估缓存性能和多轮请求的表现。
 
+## 项目结构
+
+```
+dual_round_benchmark/
+├── dual_round_benchmarker.py    # 主程序
+├── llm_mocker.py                # Mock LLM 服务器
+├── process_sharegpt.py          # ShareGPT 数据处理
+├── convert_longbench.py         # LongBench 数据转换
+├── requirements.txt             # Python 依赖
+├── examples/                    # Recipe 配置示例
+│   ├── README.md
+│   ├── recipe_example.yaml      # 基础示例
+│   ├── recipe_dual_round.yaml   # Dual-round 模式
+│   └── recipe_env_test.yaml     # 环境变量测试
+├── datasets/                    # 数据集目录
+│   ├── README.md
+│   ├── ShareGPT/               # ShareGPT 原始数据
+│   ├── LongBench/              # LongBench 原始数据
+│   ├── sharegpt_clean.jsonl    # 处理后的数据
+│   └── MixedBench.jsonl        # 混合测试数据
+├── docs/                        # 文档
+│   ├── benchmarker_guide.md    # 使用指南
+│   ├── RECIPE_GUIDE.md         # Recipe 配置指南
+│   └── ENV_VAR_TESTING.md      # 环境变量测试
+└── tests/                       # 测试文件
+    ├── test_env_variables.py
+    └── test_recipe_env_integration.sh
+```
+
 ## 核心功能
 
 ### 1. 双轮压测 (`dual_round_benchmarker.py`)

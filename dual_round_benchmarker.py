@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import csv
 import json
+import math
 import os
 import random
 import time
@@ -165,6 +166,7 @@ def count_tokens(text: str) -> int:
 class SessionData:
     session_id: str
     user_messages: List[str]
+    assistant_messages: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -222,8 +224,10 @@ class DatasetLoader:
 
     @staticmethod
     def sample_entries(dataset: List[Dict[str, Any]], num_samples: int) -> List[Dict[str, Any]]:
-        if num_samples > len(dataset):
-            raise ValueError(f"要求的样本数 ({num_samples}) 超过数据集大小 ({len(dataset)})")
+        if not dataset or num_samples <= 0:
+            return []
+        if num_samples >= len(dataset):
+            return dataset
         return random.sample(dataset, num_samples)
 
     @staticmethod
@@ -290,6 +294,10 @@ class SLOLoader:
             return False
         
         return True
+    
+    @staticmethod
+    def validate_slo(metrics: RequestMetrics, slo: Optional[SLOConstraints]) -> bool:
+        return SLOLoader.check_slo(metrics, slo)
 
 
 class RecipeLoader:
@@ -624,18 +632,33 @@ class BenchmarkRunner:
         self.conversation_state: Dict[str, ConversationHistory] = {}
 
     def _reset_conversation_state(self, sessions: List[SessionData]):
+        for session in sessions:
+            session.assistant_messages.clear()
         self.conversation_state = {
             session.session_id: ConversationHistory(self.config.max_context_tokens)
             for session in sessions
         }
 
     def _sanitize_user_message(self, text: Any) -> str:
+        if text is None:
+            return ""
+        if isinstance(text, dict):
+            text = text.get("content") or text.get("value") or ""
         if not isinstance(text, str):
             text = str(text)
         text = text.strip()
         if not text:
             return ""
         return DatasetLoader.truncate_text(text, self.config.max_input_length)
+
+    def _build_conversation_history(self, session: SessionData, turn_index: int) -> List[Dict[str, str]]:
+        history = []
+        for i in range(turn_index + 1):
+            if i < len(session.user_messages):
+                history.append({"role": "user", "content": session.user_messages[i]})
+            if i < turn_index and i < len(session.assistant_messages):
+                history.append({"role": "assistant", "content": session.assistant_messages[i]})
+        return history
 
     def _extract_user_messages_from_entry(self, entry: Dict[str, Any]) -> List[str]:
         if isinstance(entry.get("user_messages"), list):
@@ -1125,8 +1148,8 @@ class MetricsAnalyzer:
         if not values:
             return 0.0
         sorted_values = sorted(values)
-        index = int(len(sorted_values) * percentile / 100)
-        return sorted_values[min(index, len(sorted_values) - 1)]
+        index = math.ceil(len(sorted_values) * percentile / 100) - 1
+        return sorted_values[max(0, min(index, len(sorted_values) - 1))]
 
     @staticmethod
     def analyze_round(round_num: int, results: List[RequestMetrics], prometheus_metrics: Dict[str, List[float]] = None, 
