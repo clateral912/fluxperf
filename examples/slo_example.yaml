@@ -1,0 +1,26 @@
+# SLO 配置文件示例
+# 定义性能目标,用于计算 Goodput
+
+# SLO 名称(可选)
+name: "Default SLO"
+
+# SLO 约束条件
+# 所有条件必须同时满足才算满足 SLO
+constraints:
+  # Time to First Token (TTFT) 约束,单位: ms
+  ttft_ms:
+    max: 200  # TTFT 必须小于 200ms
+
+  # Inter-Token Latency (ITL) 约束,单位: ms
+  itl_ms:
+    max: 100  # 平均 ITL 必须小于 100ms
+
+  # 总延迟约束,单位: ms (可选)
+  # latency_ms:
+  #   max: 5000
+
+# 其他可用的约束条件(注释掉的是可选项):
+
+# 输出 token 吞吐量约束,单位: tokens/sec
+# output_token_throughput:
+#   min: 10  # 每个请求的输出 token 吞吐量必须大于 10 tokens/sec

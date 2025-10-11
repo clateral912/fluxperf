@@ -1,0 +1,17 @@
+# Dual-Round Benchmarker Dependencies
+
+# Async HTTP client for OpenAI API requests
+aiohttp>=3.8.0
+
+# YAML parsing for SLO configuration files
+pyyaml>=6.0
+
+# Progress bar display for benchmark execution
+tqdm>=4.65.0
+
+# Prometheus metrics parsing
+prometheus-client>=0.16.0
+
+# Optional: For LongBench dataset conversion (from HuggingFace)
+# Uncomment if you need to download LongBench datasets
+# datasets>=2.14.0
