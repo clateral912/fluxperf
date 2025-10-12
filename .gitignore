@@ -1,2 +1,55 @@
-# Created by venv; see https://docs.python.org/3/library/venv.html
-*
+# datasets
+datasets/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv/
+pyvenv.cfg
+bin/
+include/
+lib/
+lib64/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Project specific
+CLAUDE.md
+benchmark_results/
+debug_logs/
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

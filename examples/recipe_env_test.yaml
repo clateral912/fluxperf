@@ -1,0 +1,43 @@
+# Recipe 用于测试环境变量管理功能
+# 这个 recipe 会在不同 stage 设置不同的环境变量，并在实际运行中验证
+
+global:
+  dataset: "datasets/sharegpt_clean.jsonl"
+  mode: "multi_turn"
+  model: "test-model"
+  timeout: 60
+  output_dir: "env_test_results"
+
+mock_server:
+  enabled: true
+  host: "127.0.0.1"
+  port: 8765
+
+stages:
+  - name: "Test Stage 1 - GPU 0"
+    env:
+      CUDA_VISIBLE_DEVICES: "0"
+      TEST_STAGE_NAME: "stage_1"
+      VLLM_ATTENTION_BACKEND: "FLASH_ATTN"
+      MY_CUSTOM_VAR: "value_from_stage_1"
+    concurrency_levels: [2]
+    num_samples: [4]
+  
+  - name: "Test Stage 2 - GPU 0,1"
+    env:
+      CUDA_VISIBLE_DEVICES: "0,1"
+      TEST_STAGE_NAME: "stage_2"
+      VLLM_ATTENTION_BACKEND: "XFORMERS"
+      MY_CUSTOM_VAR: "value_from_stage_2"
+    concurrency_levels: [2]
+    num_samples: [4]
+  
+  - name: "Test Stage 3 - All GPUs"
+    env:
+      CUDA_VISIBLE_DEVICES: "0,1,2,3"
+      TEST_STAGE_NAME: "stage_3"
+      VLLM_ATTENTION_BACKEND: "FLASH_ATTN"
+      MY_CUSTOM_VAR: "value_from_stage_3"
+      NEW_VAR_IN_STAGE_3: "only_in_stage_3"
+    concurrency_levels: [2]
+    num_samples: [4]

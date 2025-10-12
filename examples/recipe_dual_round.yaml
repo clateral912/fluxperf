@@ -1,0 +1,37 @@
+# Dual Round 模式配置示例
+# 适用于 LongBench 等单轮问答数据集
+
+global:
+  dataset: "data/longbench_sample.jsonl"
+  endpoint: "http://127.0.0.1:8001/v1/chat/completions"
+  model: "gpt-3.5-turbo"
+  mode: "dual_round"  # 关键: 设置为 dual_round 模式
+  timeout: 300
+  shuffle_round2: true
+  output_dir: "benchmark_results_dual"
+
+mock_server:
+  enabled: true
+  host: "127.0.0.1"
+  port: 8765
+
+stages:
+  - name: "Warm-up"
+    env:
+      TEST_PHASE: "warmup"
+    concurrency_levels: [2]
+    num_samples: [4]
+  
+  - name: "Low Load"
+    env:
+      TEST_PHASE: "low_load"
+      CUDA_VISIBLE_DEVICES: "0"
+    concurrency_levels: [4, 8]
+    num_samples: [8, 16]
+  
+  - name: "High Load"
+    env:
+      TEST_PHASE: "high_load"
+      CUDA_VISIBLE_DEVICES: "0,1"
+    concurrency_levels: [16, 32]
+    num_samples: [32, 64]
