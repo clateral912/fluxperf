@@ -13,12 +13,33 @@ def iter_input_files(input_path: Path) -> Iterable[Path]:
         return
     if not input_path.is_dir():
         raise ValueError(f"输入路径无效: {input_path}")
-    for path in sorted(input_path.rglob("*.json")):
-        if path.is_file():
+    for path in sorted(input_path.rglob("*")):
+        if path.is_file() and path.suffix in {".json", ".jsonl"}:
             yield path
 
 
 def load_sessions(path: Path) -> Iterable[dict]:
+    # 如果是 JSONL 格式（每行一个 JSON 对象）
+    if path.suffix == ".jsonl":
+        try:
+            with path.open("r", encoding="utf-8") as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        item = json.loads(line)
+                        if isinstance(item, dict):
+                            yield item
+                    except json.JSONDecodeError as exc:
+                        raise ValueError(f"JSON 解析失败: {path}:{line_num}: {exc}") from exc
+        except Exception as exc:
+            if not isinstance(exc, ValueError):
+                raise ValueError(f"读取文件失败: {path}: {exc}") from exc
+            raise
+        return
+
+    # 如果是普通 JSON 格式
     try:
         with path.open("r", encoding="utf-8") as f:
             data = json.load(f)

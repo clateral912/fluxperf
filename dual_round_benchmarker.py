@@ -833,9 +833,12 @@ class BenchmarkRunner:
                     if active_requests:
                         oldest_req_id, oldest_start = min(active_requests.items(), key=lambda x: x[1])
                         wait_time = time.time() - oldest_start
-                        pbar.set_postfix_str(f"等待: {oldest_req_id} ({wait_time:.1f}s)", refresh=True)
+                        # 固定宽度的 postfix，防止进度条跳动
+                        postfix = f"等待: {oldest_req_id[:40]:40s} ({wait_time:6.1f}s)"
+                        pbar.set_postfix_str(postfix, refresh=True)
                     else:
-                        pbar.set_postfix_str("", refresh=False)
+                        # 保持相同宽度的空白占位
+                        pbar.set_postfix_str(" " * 54, refresh=False)
 
         temp_config = BenchmarkConfig(
             dataset_path=self.config.dataset_path,
@@ -1018,7 +1021,7 @@ class BenchmarkRunner:
             current_num_samples = self.config.num_samples[idx]
 
             sampled_entries = DatasetLoader.sample_entries(dataset, current_num_samples)
-            
+
             if self.config.mode == BenchmarkMode.DUAL_ROUND:
                 sessions = self._entries_to_single_turn_sessions(sampled_entries)
             else:
@@ -1035,18 +1038,23 @@ class BenchmarkRunner:
 
             round1_results, round1_prom_metrics = await self.run_round(1, concurrency, sessions)
 
-            if self.config.reset_cache_between_rounds:
-                await self.reset_kvcache(f"并发 {concurrency}: 第1轮 -> 第2轮")
-
-            if self.config.shuffle_round2:
-                shuffled_sessions = sessions.copy()
-                random.shuffle(shuffled_sessions)
+            # Multi-turn 模式只跑一轮，Dual-round 模式跑两轮
+            if self.config.mode == BenchmarkMode.MULTI_TURN:
+                # Multi-turn 模式：只有一轮，复用第一轮的结果
+                all_results[concurrency] = (round1_results, [], round1_prom_metrics, {})
             else:
-                shuffled_sessions = sessions
+                # Dual-round 模式：跑两轮
+                if self.config.reset_cache_between_rounds:
+                    await self.reset_kvcache(f"并发 {concurrency}: 第1轮 -> 第2轮")
 
-            round2_results, round2_prom_metrics = await self.run_round(2, concurrency, shuffled_sessions)
+                if self.config.shuffle_round2:
+                    shuffled_sessions = sessions.copy()
+                    random.shuffle(shuffled_sessions)
+                else:
+                    shuffled_sessions = sessions
 
-            all_results[concurrency] = (round1_results, round2_results, round1_prom_metrics, round2_prom_metrics)
+                round2_results, round2_prom_metrics = await self.run_round(2, concurrency, shuffled_sessions)
+                all_results[concurrency] = (round1_results, round2_results, round1_prom_metrics, round2_prom_metrics)
 
         await self.reset_kvcache("所有评测任务完成")
 
@@ -1117,10 +1125,12 @@ async def run_recipe_benchmark(recipe: Recipe):
                 # 分析并打印结果
                 for concurrency, (round1_results, round2_results, round1_prom, round2_prom) in stage_results.items():
                     round1_metrics = MetricsAnalyzer.analyze_round(1, round1_results, round1_prom, stage.name, concurrency)
-                    round2_metrics = MetricsAnalyzer.analyze_round(2, round2_results, round2_prom, stage.name, concurrency)
-                    
                     MetricsAnalyzer.print_metrics(concurrency, round1_metrics)
-                    MetricsAnalyzer.print_metrics(concurrency, round2_metrics)
+
+                    # Multi-turn 模式只跑一轮，不打印第二轮
+                    if config.mode == BenchmarkMode.DUAL_ROUND and round2_results:
+                        round2_metrics = MetricsAnalyzer.analyze_round(2, round2_results, round2_prom, stage.name, concurrency)
+                        MetricsAnalyzer.print_metrics(concurrency, round2_metrics)
                 
             finally:
                 # 恢复环境变量
@@ -2090,7 +2100,97 @@ def main():
             recipe = RecipeLoader.load_recipe(args.recipe)
             print(f"加载 Recipe: {args.recipe}")
             print(f"包含 {len(recipe.stages)} 个测试阶段\n")
-            
+
+            # 允许 CLI 参数覆盖 recipe 中的任何设置
+            # 优先级: 命令行参数 > recipe 配置
+            overrides = []
+
+            if args.dataset:
+                recipe.global_config['dataset'] = str(args.dataset)
+                overrides.append(f"dataset = {args.dataset}")
+
+            if args.endpoint:
+                recipe.global_config['endpoint'] = args.endpoint
+                overrides.append(f"endpoint = {args.endpoint}")
+
+            if args.mode != 'multi_turn':  # 如果不是默认值
+                recipe.global_config['mode'] = args.mode
+                overrides.append(f"mode = {args.mode}")
+
+            if args.max_input_length is not None:
+                recipe.global_config['max_input_length'] = args.max_input_length
+                overrides.append(f"max_input_length = {args.max_input_length}")
+
+            if args.max_output_tokens is not None:
+                recipe.global_config['max_output_tokens'] = args.max_output_tokens
+                overrides.append(f"max_output_tokens = {args.max_output_tokens}")
+
+            if args.model != "gpt-3.5-turbo":  # 如果不是默认值
+                recipe.global_config['model'] = args.model
+                overrides.append(f"model = {args.model}")
+
+            if args.api_key is not None:
+                recipe.global_config['api_key'] = args.api_key
+                overrides.append(f"api_key = {args.api_key}")
+
+            if args.timeout != 300:  # 如果不是默认值
+                recipe.global_config['timeout'] = args.timeout
+                overrides.append(f"timeout = {args.timeout}")
+
+            if args.no_shuffle_round2:
+                recipe.global_config['shuffle_round2'] = False
+                overrides.append(f"shuffle_round2 = False")
+
+            if args.slo_file is not None:
+                recipe.global_config['slo_file'] = str(args.slo_file)
+                overrides.append(f"slo_file = {args.slo_file}")
+
+            if args.output_dir != Path("benchmark_results"):  # 如果不是默认值
+                recipe.global_config['output_dir'] = str(args.output_dir)
+                overrides.append(f"output_dir = {args.output_dir}")
+
+            if args.prometheus_url is not None:
+                recipe.global_config['prometheus_url'] = args.prometheus_url
+                overrides.append(f"prometheus_url = {args.prometheus_url}")
+
+            if args.prometheus_metrics:  # 如果不是空列表
+                recipe.global_config['prometheus_metrics'] = args.prometheus_metrics
+                overrides.append(f"prometheus_metrics = {args.prometheus_metrics}")
+
+            if args.save_requests:
+                recipe.global_config['save_requests'] = True
+                overrides.append(f"save_requests = True")
+
+            if args.reset_cache_url is not None:
+                recipe.global_config['reset_cache_url'] = args.reset_cache_url
+                overrides.append(f"reset_cache_url = {args.reset_cache_url}")
+
+            if args.reset_cache_between_rounds:
+                recipe.global_config['reset_cache_between_rounds'] = True
+                overrides.append(f"reset_cache_between_rounds = True")
+
+            if args.reset_cache_between_concurrency:
+                recipe.global_config['reset_cache_between_concurrency'] = True
+                overrides.append(f"reset_cache_between_concurrency = True")
+
+            if args.debug:
+                recipe.global_config['debug'] = True
+                overrides.append(f"debug = True")
+
+            if args.debug_log_dir is not None:
+                recipe.global_config['debug_log_dir'] = str(args.debug_log_dir)
+                overrides.append(f"debug_log_dir = {args.debug_log_dir}")
+
+            if args.max_context_tokens is not None:
+                recipe.global_config['max_context_tokens'] = args.max_context_tokens
+                overrides.append(f"max_context_tokens = {args.max_context_tokens}")
+
+            if overrides:
+                print("CLI 参数覆盖:")
+                for override in overrides:
+                    print(f"  - {override}")
+                print()
+
             asyncio.run(run_recipe_benchmark(recipe))
             return
         except Exception as e:
@@ -2214,11 +2314,16 @@ def main():
     
     for concurrency, (round1_results, round2_results, round1_prom_metrics, round2_prom_metrics) in all_raw_results.items():
         round1_metrics = MetricsAnalyzer.analyze_round(1, round1_results, round1_prom_metrics)
-        round2_metrics = MetricsAnalyzer.analyze_round(2, round2_results, round2_prom_metrics)
-        
         MetricsAnalyzer.print_metrics(concurrency, round1_metrics)
-        MetricsAnalyzer.print_metrics(concurrency, round2_metrics)
-        
+
+        # Multi-turn 模式只跑一轮，不打印第二轮
+        if mode == BenchmarkMode.DUAL_ROUND and round2_results:
+            round2_metrics = MetricsAnalyzer.analyze_round(2, round2_results, round2_prom_metrics)
+            MetricsAnalyzer.print_metrics(concurrency, round2_metrics)
+        else:
+            # Multi-turn 模式创建一个空的 round2_metrics
+            round2_metrics = MetricsAnalyzer.analyze_round(2, [], {})
+
         all_results[concurrency] = (round1_metrics, round2_metrics, round1_results, round2_results)
         all_metrics_only[concurrency] = (round1_metrics, round2_metrics)
     

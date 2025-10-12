@@ -44,6 +44,7 @@ lib64/
 .DS_Store
 
 # Project specific
+.claude
 CLAUDE.md
 benchmark_results/
 debug_logs/
