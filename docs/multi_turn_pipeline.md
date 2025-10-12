@@ -1,57 +1,57 @@
-# 多轮压测工作流说明
+# Multi-Turn Load Testing Workflow Guide
 
-## 目录
-- [数据准备](#数据准备)
-- [本地 Mock 服务](#本地-mock-服务)
-- [压测执行流程](#压测执行流程)
-- [调试与日志](#调试与日志)
-- [常见问题](#常见问题)
+## Table of Contents
+- [Data Preparation](#data-preparation)
+- [Local Mock Service](#local-mock-service)
+- [Load Testing Execution](#load-testing-execution)
+- [Debugging and Logging](#debugging-and-logging)
+- [Common Issues](#common-issues)
 
 ---
 
-## 数据准备
+## Data Preparation
 
-### 1. ShareGPT 数据集处理
+### 1. ShareGPT Dataset Processing
 
-使用 `process_sharegpt.py` 提取 human 发言：
+Use `process_sharegpt.py` to extract human messages:
 
 ```bash
 python process_sharegpt.py data/ShareGPT/ sharegpt_clean.jsonl --max-sessions 1000
 ```
 
-输出 JSONL 每行示例：
+Output JSONL line example:
 
 ```json
-{"session_id": "session-1", "user_messages": ["问题1", "问题2"], "source": "data/ShareGPT/sg.json"}
+{"session_id": "session-1", "user_messages": ["question1", "question2"], "source": "data/ShareGPT/sg.json"}
 ```
 
-### 2. LongBench 转换
+### 2. LongBench Conversion
 
 ```bash
 python convert_longbench.py --dataset narrativeqa --num-samples 200 --output data/nq.jsonl
 ```
 
-可与 ShareGPT 合并：
+Can be merged with ShareGPT:
 
 ```bash
 cat sharegpt_clean.jsonl data/nq.jsonl > data/mixed.jsonl
 ```
 
-### 3. 数据格式要求
+### 3. Data Format Requirements
 
-工具支持三种多轮格式：
-1. `{"session_id": "s1", "user_messages": ["问1", "问2"]}`
+The tool supports three multi-turn formats:
+1. `{"session_id": "s1", "user_messages": ["question1", "question2"]}`
 2. `{"conversations": [{"from": "human", "value": "hi"}, ...]}`
-3. `{"messages": [{"role": "user", "content": "问"}, ...]}`
+3. `{"messages": [{"role": "user", "content": "question"}, ...]}`
 
 ---
 
-## 本地 Mock 服务
+## Local Mock Service
 
-启动内置 mock：
+Start built-in mock:
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset examples/example_dataset.json \
   --mock-server \
   --mock-host 127.0.0.1 \
@@ -60,22 +60,22 @@ python dual_round_benchmarker.py \
   --concurrency 2
 ```
 
-独立启动：
+Start independently:
 
 ```bash
 python llm_mocker.py --host 0.0.0.0 --port 8001
 ```
 
-健康检查：`curl http://127.0.0.1:8001/health`
+Health check: `curl http://127.0.0.1:8001/health`
 
 ---
 
-## 压测执行流程
+## Load Testing Execution
 
-### 1. 基础命令
+### 1. Basic Command
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset data/mixed.jsonl \
   --endpoint http://127.0.0.1:8001/v1/chat/completions \
   --num-samples 50 \
@@ -85,15 +85,15 @@ python dual_round_benchmarker.py \
   --output-dir results/mixed
 ```
 
-### 2. Session 历史逻辑
+### 2. Session History Logic
 
-- 首次请求：历史为空，仅发送当前问
-- 返回后追加 `{user, assistant}` 对
-- 新请求前自动截断超出的最老轮次
+- First request: Empty history, only send current question
+- After response: Append `{user, assistant}` pair
+- Before new request: Automatically truncate oldest turns if exceeded
 
-### 3. KV Cache 重置
+### 3. KV Cache Reset
 
-若 API 提供缓存清除接口，可使用：
+If API provides cache clearing interface, use:
 
 ```
 --reset-cache-url http://127.0.0.1:8001/reset
@@ -102,26 +102,26 @@ python dual_round_benchmarker.py \
 
 ---
 
-## 调试与日志
+## Debugging and Logging
 
-### 1. 请求保存
+### 1. Request Saving
 
 ```
 --save-requests --output-dir debug_requests
 ```
-生成 `requests_round{n}_conc{m}_timestamp.jsonl`。
+Generates `requests_round{n}_conc{m}_timestamp.jsonl`.
 
-### 2. 调试模式
+### 2. Debug Mode
 
 ```
 --debug --debug-log-dir debug_logs
 ```
-输出包含：
-- session_id、turn_index
-- 消息列表
+Output includes:
+- session_id, turn_index
+- Message list
 - context_tokens / history_truncated
 
-### 3. Prometheus 集成
+### 3. Prometheus Integration
 
 ```
 --prometheus-url http://localhost:3001/metrics \
@@ -130,9 +130,9 @@ python dual_round_benchmarker.py \
 
 ---
 
-## 常见问题
+## Common Issues
 
-1. **没有安装 aiohttp**：运行 `pip install -r requirements.txt`
-2. **历史过长导致截断频繁**：提升 `--max-context-tokens` 或减少会话轮数
-3. **Mock 服务端口占用**：调整 `--mock-port` 或提前关闭占用进程
-4. **JSONL 格式错误**：确保每行独立 JSON 且无额外逗号
+1. **aiohttp not installed**: Run `pip install -r requirements.txt`
+2. **History too long causing frequent truncation**: Increase `--max-context-tokens` or reduce session turns
+3. **Mock service port occupied**: Adjust `--mock-port` or close occupying process
+4. **JSONL format error**: Ensure each line is independent JSON with no extra commas

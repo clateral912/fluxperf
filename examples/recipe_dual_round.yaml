@@ -1,11 +1,11 @@
-# Dual Round 模式配置示例
-# 适用于 LongBench 等单轮问答数据集
+# Dual Round Mode Configuration Example
+# Suitable for single-turn Q&A datasets like LongBench
 
 global:
   dataset: "data/longbench_sample.jsonl"
   endpoint: "http://127.0.0.1:8001/v1/chat/completions"
   model: "gpt-3.5-turbo"
-  mode: "dual_round"  # 关键: 设置为 dual_round 模式
+  mode: "dual_round"  # Key: Set to dual_round mode
   timeout: 300
   shuffle_round2: true
   output_dir: "benchmark_results_dual"
@@ -14,6 +14,18 @@ mock_server:
   enabled: true
   host: "127.0.0.1"
   port: 8765
+
+# vLLM Auto-Restart Configuration (Optional)
+vllm:
+  # Enable auto-restart: if true, vLLM will be restarted before each stage
+  auto_restart: false
+  
+  # vLLM startup command (required if auto_restart is true)
+  # Example: "vllm serve meta-llama/Llama-2-7b-chat-hf --port 8000"
+  startup_command: null
+  
+  # Port for health check (default: 8000)
+  port: 8000
 
 stages:
   - name: "Warm-up"

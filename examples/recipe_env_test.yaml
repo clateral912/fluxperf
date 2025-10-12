@@ -1,5 +1,5 @@
-# Recipe 用于测试环境变量管理功能
-# 这个 recipe 会在不同 stage 设置不同的环境变量，并在实际运行中验证
+# Recipe for testing environment variable management functionality
+# This recipe sets different environment variables in different stages and validates them during execution
 
 global:
   dataset: "datasets/sharegpt_clean.jsonl"
@@ -12,6 +12,18 @@ mock_server:
   enabled: true
   host: "127.0.0.1"
   port: 8765
+
+# vLLM Auto-Restart Configuration (Optional)
+vllm:
+  # Enable auto-restart: if true, vLLM will be restarted before each stage
+  auto_restart: false
+  
+  # vLLM startup command (required if auto_restart is true)
+  # Example: "vllm serve meta-llama/Llama-2-7b-chat-hf --port 8000"
+  startup_command: null
+  
+  # Port for health check (default: 8000)
+  port: 8000
 
 stages:
   - name: "Test Stage 1 - GPU 0"

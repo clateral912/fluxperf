@@ -12,14 +12,14 @@ def iter_input_files(input_path: Path) -> Iterable[Path]:
         yield input_path
         return
     if not input_path.is_dir():
-        raise ValueError(f"输入路径无效: {input_path}")
+        raise ValueError(f"Invalid input path: {input_path}")
     for path in sorted(input_path.rglob("*")):
         if path.is_file() and path.suffix in {".json", ".jsonl"}:
             yield path
 
 
 def load_sessions(path: Path) -> Iterable[dict]:
-    # 如果是 JSONL 格式（每行一个 JSON 对象）
+    # If JSONL format (one JSON object per line)
     if path.suffix == ".jsonl":
         try:
             with path.open("r", encoding="utf-8") as f:
@@ -32,19 +32,19 @@ def load_sessions(path: Path) -> Iterable[dict]:
                         if isinstance(item, dict):
                             yield item
                     except json.JSONDecodeError as exc:
-                        raise ValueError(f"JSON 解析失败: {path}:{line_num}: {exc}") from exc
+                        raise ValueError(f"JSON parsing failed: {path}:{line_num}: {exc}") from exc
         except Exception as exc:
             if not isinstance(exc, ValueError):
-                raise ValueError(f"读取文件失败: {path}: {exc}") from exc
+                raise ValueError(f"Failed to read file: {path}: {exc}") from exc
             raise
         return
 
-    # 如果是普通 JSON 格式
+    # If regular JSON format
     try:
         with path.open("r", encoding="utf-8") as f:
             data = json.load(f)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"JSON 解析失败: {path}: {exc}") from exc
+        raise ValueError(f"JSON parsing failed: {path}: {exc}") from exc
     if isinstance(data, list):
         for item in data:
             if isinstance(item, dict):
@@ -56,7 +56,7 @@ def load_sessions(path: Path) -> Iterable[dict]:
                 if isinstance(item, dict):
                     yield item
     else:
-        raise ValueError(f"不支持的 JSON 结构: {path}")
+        raise ValueError(f"Unsupported JSON structure: {path}")
 
 
 def extract_user_messages(session: dict) -> list[str]:
@@ -147,10 +147,10 @@ def process_dataset(input_path: Path, output_path: Path, max_sessions: int | Non
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(prog="process_sharegpt", description="提取 ShareGPT 数据集中所有 human 发言")
-    parser.add_argument("input", type=Path, help="ShareGPT 数据集路径，支持文件或目录")
-    parser.add_argument("output", type=Path, help="输出 JSONL 文件路径")
-    parser.add_argument("--max-sessions", type=int, default=None, help="最多处理的会话数量")
+    parser = argparse.ArgumentParser(prog="process_sharegpt", description="Extract all human messages from ShareGPT dataset")
+    parser.add_argument("input", type=Path, help="ShareGPT dataset path, supports file or directory")
+    parser.add_argument("output", type=Path, help="Output JSONL file path")
+    parser.add_argument("--max-sessions", type=int, default=None, help="Maximum number of sessions to process")
     return parser.parse_args()
 
 
@@ -159,9 +159,9 @@ def main() -> int:
     try:
         written = process_dataset(args.input, args.output, args.max_sessions)
     except Exception as exc:
-        print(f"处理失败: {exc}", file=sys.stderr)
+        print(f"Processing failed: {exc}", file=sys.stderr)
         return 1
-    print(f"已写入 {written} 条会话到 {args.output}")
+    print(f"Written {written} sessions to {args.output}")
     return 0
 
 

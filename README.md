@@ -1,64 +1,64 @@
-# Dual Round Benchmarker
+# FluxPerf
 
-一个用于测试 LLM API 服务性能的双轮压测工具，专门设计用于评估缓存性能和多轮请求的表现。
+A dual-round load testing tool for benchmarking LLM API service performance, specifically designed to evaluate caching performance and multi-round request behavior.
 
-## 项目结构
+## Project Structure
 
 ```
-dual_round_benchmark/
-├── dual_round_benchmarker.py    # 主程序
-├── llm_mocker.py                # Mock LLM 服务器
-├── process_sharegpt.py          # ShareGPT 数据处理
-├── convert_longbench.py         # LongBench 数据转换
-├── requirements.txt             # Python 依赖
-├── examples/                    # Recipe 配置示例
+fluxperf/
+├── fluxperf.py                  # Main program
+├── llm_mocker.py                # Mock LLM server
+├── process_sharegpt.py          # ShareGPT data processing
+├── convert_longbench.py         # LongBench data conversion
+├── requirements.txt             # Python dependencies
+├── examples/                    # Recipe configuration examples
 │   ├── README.md
-│   ├── recipe_example.yaml      # 基础示例
-│   ├── recipe_dual_round.yaml   # Dual-round 模式
-│   └── recipe_env_test.yaml     # 环境变量测试
-├── datasets/                    # 数据集目录
+│   ├── recipe_example.yaml      # Basic example
+│   ├── recipe_dual_round.yaml   # Dual-round mode
+│   └── recipe_env_test.yaml     # Environment variable testing
+├── datasets/                    # Dataset directory
 │   ├── README.md
-│   ├── ShareGPT/               # ShareGPT 原始数据
-│   ├── LongBench/              # LongBench 原始数据
-│   ├── sharegpt_clean.jsonl    # 处理后的数据
-│   └── MixedBench.jsonl        # 混合测试数据
-├── docs/                        # 文档
-│   ├── benchmarker_guide.md    # 使用指南
-│   ├── RECIPE_GUIDE.md         # Recipe 配置指南
-│   └── ENV_VAR_TESTING.md      # 环境变量测试
-└── tests/                       # 测试文件
+│   ├── ShareGPT/               # ShareGPT raw data
+│   ├── LongBench/              # LongBench raw data
+│   ├── sharegpt_clean.jsonl    # Processed data
+│   └── MixedBench.jsonl        # Mixed test data
+├── docs/                        # Documentation
+│   ├── benchmarker_guide.md    # Usage guide
+│   ├── RECIPE_GUIDE.md         # Recipe configuration guide
+│   └── ENV_VAR_TESTING.md      # Environment variable testing
+└── tests/                       # Test files
     ├── test_env_variables.py
     └── test_recipe_env_integration.sh
 ```
 
-## 核心功能
+## Core Features
 
-### 1. 双轮压测 (`dual_round_benchmarker.py`)
+### 1. Dual-Round Load Testing (`fluxperf.py`)
 
-对同一批请求进行两轮测试，用于评估 KV 缓存、前缀缓存等优化的效果。
+Performs two rounds of testing on the same batch of requests to evaluate the effectiveness of KV cache, prefix cache, and other optimizations.
 
-**关键特性**：
-- ✅ 支持多并发级别测试
-- ✅ 流式输出 (SSE) 支持
-- ✅ 详细的性能指标（TTFT, ITL, Latency, Throughput, Goodput）
-- ✅ Prometheus 指标集成
-- ✅ SLO 约束支持
-- ✅ 多格式输出（命令行表格、CSV、JSON）
+**Key Features**:
+- ✅ Multiple concurrency level support
+- ✅ Streaming output (SSE) support
+- ✅ Detailed performance metrics (TTFT, ITL, Latency, Throughput, Goodput)
+- ✅ Prometheus metrics integration
+- ✅ SLO constraint support
+- ✅ Multiple output formats (CLI tables, CSV, JSON)
 
-**快速开始**：
+**Quick Start**:
 ```bash
-# 安装依赖
+# Install dependencies
 pip install -r requirements.txt
 
-# 运行基础测试
-python dual_round_benchmarker.py \
+# Run basic test
+python fluxperf.py \
   --dataset examples/example_dataset.json \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 10 \
   --concurrency 5
 
-# 运行完整测试（多并发 + Prometheus）
-python dual_round_benchmarker.py \
+# Run full test (multi-concurrency + Prometheus)
+python fluxperf.py \
   --dataset examples/example_dataset.json \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 50 \
@@ -69,142 +69,142 @@ python dual_round_benchmarker.py \
   --output-dir results/test_run
 ```
 
-### 2. LongBench 数据转换器 (`convert_longbench.py`)
+### 2. LongBench Data Converter (`convert_longbench.py`)
 
-将 LongBench 数据集转换为 benchmarker 可用的 JSONL 格式。
+Converts LongBench datasets into JSONL format compatible with the benchmarker.
 
-**关键特性**：
-- ✅ 支持从 HuggingFace 自动下载
-- ✅ 支持本地文件和目录批量转换
-- ✅ 自动去重
-- ✅ 智能格式推荐
-- ✅ 采样保护（防止重复采样）
+**Key Features**:
+- ✅ Automatic download from HuggingFace
+- ✅ Local file and directory batch conversion support
+- ✅ Automatic deduplication
+- ✅ Intelligent format recommendation
+- ✅ Sampling protection (prevents duplicate sampling)
 
-**快速开始**：
+**Quick Start**:
 ```bash
-# 从 HuggingFace 下载并转换
+# Download and convert from HuggingFace
 python convert_longbench.py \
   --dataset narrativeqa \
   --num-samples 100 \
   --output data/narrativeqa.jsonl
 
-# 批量转换本地文件夹
+# Batch convert from local directory
 python convert_longbench.py \
   --input-dir LongBench_data/ \
   --num-samples 200 \
   --output data/mixed.jsonl
 ```
 
-## 安装
+## Installation
 
 ```bash
-# 克隆仓库
+# Clone repository
 git clone <repository-url>
-cd dual_round_benchmark
+cd fluxperf
 
-# 安装依赖
+# Install dependencies
 pip install -r requirements.txt
 
-# (可选) 如果需要使用 HuggingFace 下载数据
+# (Optional) For HuggingFace data download
 pip install datasets
 ```
 
-## 目录结构
+## Directory Structure
 
 ```
-dual_round_benchmark/
-├── dual_round_benchmarker.py    # 核心压测工具
-├── convert_longbench.py         # 数据转换工具
-├── requirements.txt             # Python 依赖
-├── README.md                    # 本文件
-├── docs/                        # 详细文档
-│   ├── benchmarker_guide.md    # 压测工具完整指南
-│   └── converter_guide.md      # 数据转换完整指南
-├── examples/                    # 示例文件
-│   ├── example_dataset.json    # 示例数据集
-│   └── slo_example.yaml        # SLO 配置示例
-├── tests/                       # 测试脚本
-│   ├── test_jsonl_output.py    # JSONL 格式验证
-│   └── test_prometheus.py      # Prometheus 集成测试
-└── tools/                       # 辅助工具
-    └── (空)
+fluxperf/
+├── fluxperf.py                  # Core load testing tool
+├── convert_longbench.py         # Data conversion tool
+├── requirements.txt             # Python dependencies
+├── README.md                    # This file
+├── docs/                        # Detailed documentation
+│   ├── benchmarker_guide.md    # Complete benchmarker guide
+│   └── converter_guide.md      # Complete converter guide
+├── examples/                    # Example files
+│   ├── example_dataset.json    # Sample dataset
+│   └── slo_example.yaml        # SLO configuration example
+├── tests/                       # Test scripts
+│   ├── test_jsonl_output.py    # JSONL format validation
+│   └── test_prometheus.py      # Prometheus integration test
+└── tools/                       # Utility tools
+    └── (empty)
 ```
 
-## 性能指标说明
+## Performance Metrics
 
-### 基础指标
+### Basic Metrics
 
-- **TTFT (Time to First Token)**: 首 token 延迟，从发送请求到收到第一个 token 的时间
-- **ITL (Inter-Token Latency)**: Token 间延迟，生成连续 token 之间的平均间隔
-- **Latency**: 总延迟，从发送请求到收到完整响应的时间
-- **Throughput**: 吞吐量
-  - Token 吞吐量：tokens/sec
-  - Request 吞吐量：requests/sec
-- **Goodput**: 满足 SLO 约束的有效吞吐量
+- **TTFT (Time to First Token)**: First token latency, time from request sent to first token received
+- **ITL (Inter-Token Latency)**: Inter-token latency, average interval between consecutive tokens
+- **Latency**: Total latency, time from request sent to complete response received
+- **Throughput**: Throughput
+  - Token throughput: tokens/sec
+  - Request throughput: requests/sec
+- **Goodput**: Effective throughput meeting SLO constraints
 
-### 统计值
+### Statistical Values
 
-每个指标都包含以下统计值：
-- **Avg** (平均值)
-- **P50** (中位数)
-- **P90** (90 分位数)
-- **P99** (99 分位数)
-- **Min** (最小值)
-- **Max** (最大值)
-- **Stddev** (标准差)
+Each metric includes the following statistics:
+- **Avg** (Average)
+- **P50** (Median)
+- **P90** (90th percentile)
+- **P99** (99th percentile)
+- **Min** (Minimum)
+- **Max** (Maximum)
+- **Stddev** (Standard deviation)
 
-### Prometheus 指标
+### Prometheus Metrics
 
-支持查询任意 Prometheus 指标，常用指标：
-- `lmcache_hit_rate`: 缓存命中率
-- `memory_usage_bytes`: 内存使用
-- `gpu_utilization`: GPU 利用率
+Supports querying arbitrary Prometheus metrics, common metrics:
+- `lmcache_hit_rate`: Cache hit rate
+- `memory_usage_bytes`: Memory usage
+- `gpu_utilization`: GPU utilization
 
-## 数据集格式
+## Dataset Format
 
-### JSONL 格式（推荐）
+### JSONL Format (Recommended)
 
-每行一个 JSON 对象：
+One JSON object per line:
 ```
-{"text": "第一个提示"}
-{"text": "第二个提示"}
-{"text": "第三个提示"}
+{"text": "First prompt"}
+{"text": "Second prompt"}
+{"text": "Third prompt"}
 ```
 
-### JSON 数组格式（也支持）
+### JSON Array Format (Also Supported)
 
 ```json
 [
-  {"text": "第一个提示"},
-  {"text": "第二个提示"}
+  {"text": "First prompt"},
+  {"text": "Second prompt"}
 ]
 ```
 
-## SLO 配置
+## SLO Configuration
 
-创建 `slo.yaml` 文件定义服务级别目标：
+Create an `slo.yaml` file to define service level objectives:
 
 ```yaml
 slo:
   ttft_ms: 1000        # TTFT < 1000ms
   itl_ms: 50           # ITL < 50ms
-  latency_ms: 10000    # 总延迟 < 10000ms
+  latency_ms: 10000    # Total latency < 10000ms
 ```
 
-只有同时满足所有 SLO 约束的请求才计入 Goodput。
+Only requests meeting all SLO constraints are counted in Goodput.
 
-## 输出结果
+## Output Results
 
-### 命令行输出
+### Command Line Output
 
-表格格式显示所有指标：
+Displays all metrics in table format:
 
 ```
 ========================================================================================================================
-并发: 5 | 第 1 轮性能指标
+Concurrency: 5 | Round 1 Performance Metrics
 ========================================================================================================================
-总请求数: 50 | 成功: 50 | 失败: 0 | 测试时长: 25.43 秒
-平均输入 tokens: 15.2 | 平均输出 tokens: 128.6
+Total Requests: 50 | Success: 50 | Failed: 0 | Test Duration: 25.43 sec
+Average Input Tokens: 15.2 | Average Output Tokens: 128.6
 ------------------------------------------------------------------------------------------------------------------------
 │ Metric                       │ Avg          │ P50          │ P90          │ P99          │ Min          │ Max          │ Stddev       │
 ├──────────────────────────────┼──────────────┼──────────────┼──────────────┼──────────────┼──────────────┼──────────────┼──────────────┤
@@ -214,31 +214,31 @@ slo:
 └──────────────────────────────┴──────────────┴──────────────┴──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘
 
 Throughput:
-  Token 吞吐量: 52.14 tokens/sec
-  Request 吞吐量: 0.41 requests/sec
+  Token Throughput: 52.14 tokens/sec
+  Request Throughput: 0.41 requests/sec
 
 Goodput (SLO):
-  满足 SLO 的请求数: 45 / 50 (90.00%)
+  Requests Meeting SLO: 45 / 50 (90.00%)
 ```
 
-### CSV 输出
+### CSV Output
 
-自动生成 CSV 文件，便于在 Excel 中分析：
-- `results/metrics_summary.csv`: 所有并发级别的汇总对比
+Automatically generates CSV files for easy analysis in Excel:
+- `results/metrics_summary.csv`: Summary comparison of all concurrency levels
 
-### JSON 输出
+### JSON Output
 
-完整的原始数据，便于程序化分析：
-- `results/concurrency_5_round_1.json`: 详细的请求级别数据
+Complete raw data for programmatic analysis:
+- `results/concurrency_5_round_1.json`: Detailed request-level data
 
-## 使用场景
+## Use Cases
 
-### 1. 缓存性能评估
+### 1. Cache Performance Evaluation
 
-通过对比两轮测试的性能差异，评估缓存效果：
+Evaluate cache effectiveness by comparing performance differences between two rounds:
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset data/narrativeqa.jsonl \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 50 \
@@ -247,16 +247,16 @@ python dual_round_benchmarker.py \
   --prometheus-metrics lmcache_hit_rate
 ```
 
-**预期结果**：
-- 第 1 轮：缓存未命中，TTFT 较高
-- 第 2 轮：缓存命中，TTFT 显著降低
+**Expected Results**:
+- Round 1: Cache miss, higher TTFT
+- Round 2: Cache hit, significantly lower TTFT
 
-### 2. 多并发压测
+### 2. Multi-Concurrency Load Testing
 
-测试不同并发级别下的性能：
+Test performance under different concurrency levels:
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset data/mixed.jsonl \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 100 \
@@ -264,12 +264,12 @@ python dual_round_benchmarker.py \
   --output-dir results/scaling_test
 ```
 
-### 3. SLO 合规性测试
+### 3. SLO Compliance Testing
 
-验证服务是否满足 SLO 要求：
+Verify service meets SLO requirements:
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset data/production_queries.jsonl \
   --endpoint http://production-api:8000/v1/chat/completions \
   --num-samples 1000 \
@@ -278,51 +278,51 @@ python dual_round_benchmarker.py \
   --output-dir results/slo_check
 ```
 
-## 常见问题
+## FAQ
 
-### Q: 如何设置合适的并发数？
+### Q: How to set appropriate concurrency levels?
 
-A: 建议从低到高逐步测试：`--concurrency 1 5 10 20 50`，观察性能拐点。
+A: Recommended to test gradually from low to high: `--concurrency 1 5 10 20 50`, observe performance inflection points.
 
-### Q: TTFT 和 ITL 的区别？
+### Q: What's the difference between TTFT and ITL?
 
 A:
-- **TTFT**: 首次响应速度，影响用户感知延迟
-- **ITL**: 持续生成速度，影响流式体验
+- **TTFT**: First response speed, affects user-perceived latency
+- **ITL**: Continuous generation speed, affects streaming experience
 
-### Q: Goodput 为 0% 怎么办？
+### Q: What if Goodput is 0%?
 
-A: 检查 SLO 配置是否过于严格，或者服务性能是否需要优化。
+A: Check if SLO configuration is too strict, or if service performance needs optimization.
 
-### Q: 支持非 OpenAI 格式的 API 吗？
+### Q: Does it support non-OpenAI format APIs?
 
-A: 目前仅支持 OpenAI 兼容的 Chat Completions API。
+A: Currently only supports OpenAI-compatible Chat Completions API.
 
-## 详细文档
+## Detailed Documentation
 
-- **[Benchmarker 完整指南](docs/benchmarker_guide.md)**: 压测工具的详细使用说明
-- **[Converter 完整指南](docs/converter_guide.md)**: 数据转换工具的详细说明
-- **[开发者指南](CLAUDE.md)**: 代码架构和开发说明
+- **[Complete Benchmarker Guide](docs/benchmarker_guide.md)**: Detailed usage instructions for the load testing tool
+- **[Complete Converter Guide](docs/converter_guide.md)**: Detailed instructions for the data conversion tool
+- **[Developer Guide](CLAUDE.md)**: Code architecture and development instructions
 
-## 示例和测试
+## Examples and Tests
 
-### 示例文件
-- `examples/example_dataset.json`: 10 条示例提示
-- `examples/slo_example.yaml`: SLO 配置示例
+### Example Files
+- `examples/example_dataset.json`: 10 sample prompts
+- `examples/slo_example.yaml`: SLO configuration example
 
-### 测试工具
+### Test Tools
 ```bash
-# 验证 JSONL 格式
+# Validate JSONL format
 python tests/test_jsonl_output.py data/output.jsonl
 
-# 测试 Prometheus 集成
+# Test Prometheus integration
 python tests/test_prometheus.py
 ```
 
-## 贡献
+## Contributing
 
-欢迎提交 Issue 和 Pull Request！
+Issues and Pull Requests are welcome!
 
-## 许可证
+## License
 
 MIT License

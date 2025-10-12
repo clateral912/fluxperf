@@ -1,39 +1,39 @@
-# Recipe 配置指南
+# Recipe Configuration Guide
 
-## 概述
+## Overview
 
-Recipe 功能允许你通过 YAML 配置文件定义复杂的多阶段压测场景，支持：
+The Recipe feature allows you to define complex multi-stage stress test scenarios through YAML configuration files, supporting:
 
-- **两种测试模式**: `dual_round` (单轮两次) 和 `multi_turn` (多轮对话)
-- **多阶段测试**: 每个 stage 可以设置不同的并发参数和环境变量
-- **环境变量管理**: 每个 stage 启动前设置环境变量，结束后自动恢复
-- **统一配置**: 避免重复输入大量命令行参数
+- **Two Test Modes**: `dual_round` (single-turn twice) and `multi_turn` (multi-turn conversation)
+- **Multi-Stage Testing**: Each stage can have different concurrency parameters and environment variables
+- **Environment Variable Management**: Set environment variables before each stage starts, automatically restore after completion
+- **Unified Configuration**: Avoid repeatedly entering numerous command-line parameters
 
-## 两种模式
+## Two Modes
 
-### 1. Dual Round 模式 (`dual_round`)
+### 1. Dual Round Mode (`dual_round`)
 
-适用于 **单轮问答数据集** (如 LongBench, MMLU 等):
-- 每个数据条目只包含一个问题
-- 第一轮: 发送所有问题
-- 第二轮: 再次发送相同的问题 (可选打乱顺序)
-- 用于测试缓存效果、一致性等
+Suitable for **single-turn Q&A datasets** (such as LongBench, MMLU, etc.):
+- Each data entry contains only one question
+- Round 1: Send all questions
+- Round 2: Send the same questions again (optional shuffling)
+- Used to test cache effects, consistency, etc.
 
-**示例数据格式**:
+**Example Data Format**:
 ```jsonl
 {"id": "1", "text": "What is the capital of France?"}
 {"id": "2", "text": "Explain quantum computing"}
 ```
 
-### 2. Multi Turn 模式 (`multi_turn`)
+### 2. Multi Turn Mode (`multi_turn`)
 
-适用于 **多轮对话数据集** (如 ShareGPT, OpenAssistant 等):
-- 每个数据条目包含多轮对话
-- 第一轮: 按原始顺序发送所有对话
-- 第二轮: 再次发送所有对话 (可选打乱会话顺序)
-- 用于测试上下文管理、多轮一致性等
+Suitable for **multi-turn conversation datasets** (such as ShareGPT, OpenAssistant, etc.):
+- Each data entry contains multiple conversation turns
+- Round 1: Send all conversations in original order
+- Round 2: Send all conversations again (optional shuffling of session order)
+- Used to test context management, multi-turn consistency, etc.
 
-**示例数据格式**:
+**Example Data Format**:
 ```jsonl
 {
   "id": "conv_1",
@@ -45,29 +45,29 @@ Recipe 功能允许你通过 YAML 配置文件定义复杂的多阶段压测场�
 }
 ```
 
-## Recipe 文件结构
+## Recipe File Structure
 
 ```yaml
-# 全局配置
+# Global configuration
 global:
   dataset: "path/to/dataset.jsonl"
   endpoint: "http://localhost:8001/v1/chat/completions"
   model: "gpt-3.5-turbo"
-  mode: "multi_turn"  # 或 "dual_round"
+  mode: "multi_turn"  # or "dual_round"
   
-  # 可选配置
+  # Optional configuration
   timeout: 300
   max_output_tokens: 2048
   shuffle_round2: true
   output_dir: "results"
 
-# Mock Server 配置 (可选)
+# Mock Server configuration (optional)
 mock_server:
   enabled: true
   host: "127.0.0.1"
   port: 8765
 
-# 测试阶段
+# Test stages
 stages:
   - name: "Stage 1: Low Concurrency"
     env:
@@ -84,27 +84,27 @@ stages:
     num_samples: [16, 32]
 ```
 
-## 使用方法
+## Usage
 
-### 方式 1: 使用 Recipe 文件
+### Method 1: Using Recipe File
 
 ```bash
-python dual_round_benchmarker.py --recipe recipe_example.yaml
+python fluxperf.py --recipe recipe_example.yaml
 ```
 
-### 方式 2: 命令行参数
+### Method 2: Command-Line Parameters
 
 ```bash
-# Multi-turn 模式
-python dual_round_benchmarker.py \
+# Multi-turn mode
+python fluxperf.py \
   --dataset sharegpt.jsonl \
   --endpoint http://localhost:8001/v1/chat/completions \
   --mode multi_turn \
   --num-samples 10 \
   --concurrency 5
 
-# Dual-round 模式
-python dual_round_benchmarker.py \
+# Dual-round mode
+python fluxperf.py \
   --dataset longbench.jsonl \
   --endpoint http://localhost:8001/v1/chat/completions \
   --mode dual_round \
@@ -112,40 +112,40 @@ python dual_round_benchmarker.py \
   --concurrency 10
 ```
 
-## 配置参数详解
+## Configuration Parameters Details
 
-### Global 配置
+### Global Configuration
 
-| 参数 | 类型 | 必需 | 说明 |
+| Parameter | Type | Required | Description |
 |------|------|------|------|
-| `dataset` | string | 是 | 数据集文件路径 |
-| `endpoint` | string | 条件* | API endpoint URL |
-| `mode` | string | 是 | `dual_round` 或 `multi_turn` |
-| `model` | string | 否 | 模型名称 (默认: gpt-3.5-turbo) |
-| `timeout` | int | 否 | 请求超时时间/秒 (默认: 300) |
-| `max_output_tokens` | int | 否 | 最大输出 token 数 |
-| `max_context_tokens` | int | 否 | 最大上下文 token 数 (超出时截断历史) |
-| `shuffle_round2` | bool | 否 | 第二轮是否打乱顺序 (默认: true) |
-| `output_dir` | string | 否 | 结果输出目录 |
-| `slo_file` | string | 否 | SLO 配置文件路径 |
-| `prometheus_url` | string | 否 | Prometheus metrics URL |
-| `save_requests` | bool | 否 | 是否保存请求日志 |
-| `debug` | bool | 否 | 是否启用调试模式 |
+| `dataset` | string | Yes | Dataset file path |
+| `endpoint` | string | Conditional* | API endpoint URL |
+| `mode` | string | Yes | `dual_round` or `multi_turn` |
+| `model` | string | No | Model name (default: gpt-3.5-turbo) |
+| `timeout` | int | No | Request timeout/seconds (default: 300) |
+| `max_output_tokens` | int | No | Maximum output token count |
+| `max_context_tokens` | int | No | Maximum context token count (truncate history when exceeded) |
+| `shuffle_round2` | bool | No | Whether to shuffle round 2 (default: true) |
+| `output_dir` | string | No | Results output directory |
+| `slo_file` | string | No | SLO configuration file path |
+| `prometheus_url` | string | No | Prometheus metrics URL |
+| `save_requests` | bool | No | Whether to save request logs |
+| `debug` | bool | No | Whether to enable debug mode |
 
-*当 `mock_server.enabled=true` 时可省略
+*Can be omitted when `mock_server.enabled=true`
 
-### Stage 配置
+### Stage Configuration
 
-| 参数 | 类型 | 必需 | 说明 |
+| Parameter | Type | Required | Description |
 |------|------|------|------|
-| `name` | string | 否 | 阶段名称 |
-| `concurrency_levels` | list[int] | 是 | 并发层级列表 |
-| `num_samples` | list[int] | 是 | 每个并发层级的样本数 |
-| `env` | dict | 否 | 环境变量键值对 |
+| `name` | string | No | Stage name |
+| `concurrency_levels` | list[int] | Yes | Concurrency level list |
+| `num_samples` | list[int] | Yes | Sample count for each concurrency level |
+| `env` | dict | No | Environment variable key-value pairs |
 
-## 示例 Recipe
+## Example Recipes
 
-### 示例 1: Multi-turn 模式 (ShareGPT)
+### Example 1: Multi-turn Mode (ShareGPT)
 
 ```yaml
 global:
@@ -167,7 +167,7 @@ stages:
     num_samples: [20, 40, 80]
 ```
 
-### 示例 2: Dual-round 模式 (LongBench)
+### Example 2: Dual-round Mode (LongBench)
 
 ```yaml
 global:
@@ -194,69 +194,69 @@ stages:
     num_samples: [10, 20]
 ```
 
-## 环境变量管理
+## Environment Variable Management
 
-每个 stage 可以设置专属的环境变量。运行流程:
+Each stage can set dedicated environment variables. Running process:
 
-1. **Stage 开始前**: 保存当前环境变量，设置 stage 指定的新值
-2. **Stage 运行**: 测试过程中使用新的环境变量
-3. **Stage 结束后**: 恢复原始环境变量
+1. **Before Stage Starts**: Save current environment variables, set new values specified by stage
+2. **During Stage Run**: Use new environment variables during testing
+3. **After Stage Ends**: Restore original environment variables
 
-这允许你在不同 stage 测试不同配置，例如:
-- 不同的 GPU 设备 (`CUDA_VISIBLE_DEVICES`)
-- 不同的后端 (`VLLM_ATTENTION_BACKEND`)
-- 不同的缓存策略
-- 自定义应用配置
+This allows you to test different configurations in different stages, for example:
+- Different GPU devices (`CUDA_VISIBLE_DEVICES`)
+- Different backends (`VLLM_ATTENTION_BACKEND`)
+- Different cache strategies
+- Custom application configurations
 
-## 最佳实践
+## Best Practices
 
-1. **从小规模开始**: 第一个 stage 使用较小的并发和样本数
-2. **逐步增加负载**: 后续 stage 逐渐提高并发
-3. **合理设置样本数**: 建议 `num_samples >= 2 * concurrency`
-4. **使用有意义的名称**: Stage 名称应清晰描述测试目的
-5. **隔离环境变量影响**: 每个 stage 只设置必要的环境变量
-6. **启用 Mock Server 进行测试**: 在实际测试前先用 mock 验证配置
+1. **Start Small**: Use smaller concurrency and sample counts in first stage
+2. **Gradually Increase Load**: Gradually increase concurrency in subsequent stages
+3. **Set Reasonable Sample Count**: Recommend `num_samples >= 2 * concurrency`
+4. **Use Meaningful Names**: Stage names should clearly describe test purpose
+5. **Isolate Environment Variable Impact**: Only set necessary environment variables per stage
+6. **Enable Mock Server for Testing**: Verify configuration with mock before actual testing
 
-## 故障排查
+## Troubleshooting
 
-### Recipe 加载失败
-- 检查 YAML 语法是否正确
-- 确保所有必需字段都已填写
-- 验证文件路径是否存在
+### Recipe Loading Failed
+- Check YAML syntax is correct
+- Ensure all required fields are filled
+- Verify file paths exist
 
-### 环境变量未生效
-- 确认应用程序会读取这些环境变量
-- 检查是否需要重启服务才能应用变量
+### Environment Variables Not Taking Effect
+- Confirm application reads these environment variables
+- Check if service restart needed to apply variables
 
-### 连接失败
-- 确认 endpoint URL 正确
-- 检查服务是否正在运行
-- 如果使用 mock server，确保 `enabled: true`
+### Connection Failed
+- Confirm endpoint URL is correct
+- Check if service is running
+- If using mock server, ensure `enabled: true`
 
-## 进阶用法
+## Advanced Usage
 
-### 组合多个 Recipe
+### Combining Multiple Recipes
 
-你可以创建多个 Recipe 文件，分别测试不同场景:
+You can create multiple Recipe files to test different scenarios separately:
 
 ```bash
-# 测试缓存效果
-python dual_round_benchmarker.py --recipe recipes/cache_test.yaml
+# Test cache effects
+python fluxperf.py --recipe recipes/cache_test.yaml
 
-# 测试长上下文
-python dual_round_benchmarker.py --recipe recipes/long_context.yaml
+# Test long context
+python fluxperf.py --recipe recipes/long_context.yaml
 
-# 测试高并发
-python dual_round_benchmarker.py --recipe recipes/stress_test.yaml
+# Test high concurrency
+python fluxperf.py --recipe recipes/stress_test.yaml
 ```
 
-### 与 CI/CD 集成
+### CI/CD Integration
 
-Recipe 文件可以版本控制，在 CI/CD 中自动运行:
+Recipe files can be version controlled and run automatically in CI/CD:
 
 ```yaml
 # .github/workflows/benchmark.yml
 - name: Run benchmark
   run: |
-    python dual_round_benchmarker.py --recipe ci_recipe.yaml
+    python fluxperf.py --recipe ci_recipe.yaml
 ```

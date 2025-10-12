@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python:*)"
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(python3 -c:*)",
+      "Bash(python3:*)",
+      "Bash(python fluxperf.py --help:*)",
+      "Bash(pip install:*)",
+      "Bash(python -m pip install:*)",
+      "Bash(source:*)",
+      "Bash(awk:*)"
     ],
     "deny": [],
     "ask": []

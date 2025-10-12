@@ -1,7 +1,7 @@
-# 压测配置示例文件
-# 使用方法: python dual_round_benchmarker.py --recipe recipe_example.yaml
+# Benchmark Configuration Example File
+# Usage: python fluxperf.py --recipe recipe_example.yaml
 
-# 全局配置
+# Global configuration
 global:
   dataset: "datasets/sharegpt_clean.jsonl"
   endpoint: "http://127.0.0.1:8001/v1/chat/completions"
@@ -9,12 +9,12 @@ global:
   timeout: 300
   output_dir: "benchmark_results"
   
-  # 模式选择: "dual_round" 或 "multi_turn"
-  # dual_round: 两轮模式，适用于 LongBench 等数据集
-  # multi_turn: 多轮对话模式，适用于 ShareGPT 等数据集
+  # Mode selection: "dual_round" or "multi_turn"
+  # dual_round: Two-round mode, suitable for datasets like LongBench
+  # multi_turn: Multi-turn conversation mode, suitable for datasets like ShareGPT
   mode: "multi_turn"
   
-  # 可选配置
+  # Optional configuration
   max_input_length: null
   max_output_tokens: null
   max_context_tokens: null
@@ -24,38 +24,50 @@ global:
   debug: false
   debug_log_dir: null
   
-  # SLO 配置
+  # SLO configuration
   slo_file: null
   
-  # Prometheus 配置
+  # Prometheus configuration
   prometheus_url: null
   prometheus_metrics: []
   
-  # KV Cache 配置
+  # KV Cache configuration
   reset_cache_url: null
   reset_cache_between_rounds: false
   reset_cache_between_concurrency: false
 
-# Mock Server 配置（可选）
+# Mock Server Configuration (Optional)
 mock_server:
   enabled: false
   host: "127.0.0.1"
   port: 8765
 
-# 测试阶段配置
+# vLLM Auto-Restart Configuration (Optional)
+vllm:
+  # Enable auto-restart: if true, vLLM will be restarted before each stage
+  auto_restart: false
+  
+  # vLLM startup command (required if auto_restart is true)
+  # Example: "vllm serve meta-llama/Llama-2-7b-chat-hf --port 8000"
+  startup_command: null
+  
+  # Port for health check (default: 8000)
+  port: 8000
+
+# Test Stage Configuration
 stages:
   - name: "Stage 1: Low Concurrency"
-    # 每个阶段的环境变量设置
+    # Environment variable settings for each stage
     env:
       VLLM_ATTENTION_BACKEND: "FLASH_ATTN"
       CUDA_VISIBLE_DEVICES: "0"
     
-    # 并发层级列表
+    # Concurrency level list
     concurrency_levels: [2, 4]
     
-    # 每个并发层级的样本数
-    # 如果数量与 concurrency_levels 匹配，则一一对应
-    # 否则使用默认规则 (2*concurrency)
+    # Number of samples for each concurrency level
+    # If count matches concurrency_levels, they correspond one-to-one
+    # Otherwise, use default rule (2*concurrency)
     num_samples: [4, 8]
   
   - name: "Stage 2: Medium Concurrency"

@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
-LongBench 数据集转换工具
+LongBench Dataset Conversion Tool
 
-将 LongBench 数据集格式转换为 dual_round_benchmarker 可用的 JSONL 格式。
-支持从 HuggingFace 下载或从本地 JSONL 文件加载。
+Converts LongBench dataset format to JSONL format usable by fluxperf.
+Supports downloading from HuggingFace or loading from local JSONL files.
 
-输出格式: JSONL (每行一个 JSON 对象)
+Output format: JSONL (one JSON object per line)
 
-用法:
-    # 从 HuggingFace 下载并转换
+Usage:
+    # Download from HuggingFace and convert
     python convert_longbench.py --dataset narrativeqa --num-samples 100 --output narrativeqa_bench.jsonl
 
-    # 从本地文件转换
+    # Convert from local file
     python convert_longbench.py --input-file data/narrativeqa.jsonl --num-samples 100 --output narrativeqa_bench.jsonl
 
-    # 从文件夹批量转换所有 JSONL 文件
+    # Batch convert all JSONL files from directory
     python convert_longbench.py --input-dir LongBench_data/ --num-samples 200 --output mixed_bench.jsonl
 
-    # 转换多个数据集
+    # Convert multiple datasets
     python convert_longbench.py --dataset narrativeqa qasper hotpotqa --num-samples 50 --output longbench_mixed.jsonl
 """
 
@@ -30,26 +30,26 @@ from typing import List, Dict, Any, Optional
 
 def format_longbench_entry(entry: Dict[str, Any], format_type: str = "context_question") -> Dict[str, str]:
     """
-    将 LongBench 格式的单条数据转换为 dual_round_benchmarker 格式
+    Convert a single LongBench format entry to fluxperf format
 
     Args:
-        entry: LongBench 格式的数据条目
-        format_type: 转换格式类型
-            - "context_question": 将 context 和 input 组合成问答格式
-            - "context_only": 只使用 context (用于总结任务)
-            - "question_only": 只使用 input (用于无需长上下文的任务)
-            - "concatenate": 简单拼接 context 和 input
+        entry: LongBench format data entry
+        format_type: Conversion format type
+            - "context_question": Combine context and input into Q&A format
+            - "context_only": Use only context (for summarization tasks)
+            - "question_only": Use only input (for tasks without long context)
+            - "concatenate": Simple concatenation of context and input
 
     Returns:
-        dual_round_benchmarker 格式的字典
+        Dictionary in fluxperf format
     """
     context = entry.get("context", "")
     input_text = entry.get("input", "")
 
     if format_type == "context_question":
-        # 问答格式: 先给出文档,再提问
+        # Q&A format: provide document first, then question
         if context and input_text:
-            combined_text = f"{context}\n\n问题: {input_text}"
+            combined_text = f"{context}\n\nQuestion: {input_text}"
         elif context:
             combined_text = context
         else:
@@ -65,31 +65,31 @@ def format_longbench_entry(entry: Dict[str, Any], format_type: str = "context_qu
         combined_text = f"{context}\n{input_text}".strip()
 
     else:
-        raise ValueError(f"未知的格式类型: {format_type}")
+        raise ValueError(f"Unknown format type: {format_type}")
 
     return {"text": combined_text}
 
 
 def load_from_huggingface(dataset_name: str, split: str = "test") -> List[Dict[str, Any]]:
     """
-    从 HuggingFace 加载 LongBench 数据集
+    Load LongBench dataset from HuggingFace
 
     Args:
-        dataset_name: 数据集名称 (例如 "narrativeqa", "qasper" 等)
-        split: 数据集分割 (默认 "test")
+        dataset_name: Dataset name (e.g., "narrativeqa", "qasper", etc.)
+        split: Dataset split (default "test")
 
     Returns:
-        LongBench 格式的数据列表
+        List of data in LongBench format
     """
     try:
         from datasets import load_dataset
     except ImportError:
         raise ImportError(
-            "需要安装 datasets 库来从 HuggingFace 下载数据。\n"
-            "运行: pip install datasets"
+            "datasets library is required to download data from HuggingFace.\n"
+            "Run: pip install datasets"
         )
 
-    print(f"正在从 HuggingFace 下载数据集: {dataset_name}...")
+    print(f"Downloading dataset from HuggingFace: {dataset_name}...")
     dataset = load_dataset('THUDM/LongBench', dataset_name, split=split)
 
     data = []
@@ -104,21 +104,21 @@ def load_from_huggingface(dataset_name: str, split: str = "test") -> List[Dict[s
             "_id": item.get("_id", "")
         })
 
-    print(f"✓ 加载了 {len(data)} 条数据")
+    print(f"✓ Loaded {len(data)} entries")
     return data
 
 
 def load_from_file(file_path: Path) -> List[Dict[str, Any]]:
     """
-    从本地 JSONL 或 JSON 文件加载 LongBench 数据
+    Load LongBench data from local JSONL or JSON file
 
     Args:
-        file_path: 文件路径
+        file_path: File path
 
     Returns:
-        LongBench 格式的数据列表
+        List of data in LongBench format
     """
-    print(f"正在从本地文件加载: {file_path}...")
+    print(f"Loading from local file: {file_path}...")
 
     with open(file_path, 'r', encoding='utf-8') as f:
         if file_path.suffix == '.jsonl':
@@ -130,69 +130,69 @@ def load_from_file(file_path: Path) -> List[Dict[str, Any]]:
             elif isinstance(content, dict) and 'data' in content:
                 data = content['data']
             else:
-                raise ValueError("不支持的 JSON 格式")
+                raise ValueError("Unsupported JSON format")
         else:
-            raise ValueError(f"不支持的文件格式: {file_path.suffix}")
+            raise ValueError(f"Unsupported file format: {file_path.suffix}")
 
-    print(f"✓ 加载了 {len(data)} 条数据")
+    print(f"✓ Loaded {len(data)} entries")
     return data
 
 
 def load_from_directory(dir_path: Path) -> List[Dict[str, Any]]:
     """
-    从目录中加载所有 JSONL 文件并聚合数据
+    Load and aggregate all JSONL files from directory
 
     Args:
-        dir_path: 目录路径
+        dir_path: Directory path
 
     Returns:
-        聚合后的 LongBench 格式数据列表
+        Aggregated list of data in LongBench format
     """
-    print(f"正在扫描目录: {dir_path}")
+    print(f"Scanning directory: {dir_path}")
 
-    # 查找所有 .jsonl 文件
+    # Find all .jsonl files
     jsonl_files = list(dir_path.glob("**/*.jsonl"))
 
     if not jsonl_files:
-        print(f"⚠ 警告: 目录 {dir_path} 中未找到任何 .jsonl 文件")
+        print(f"⚠ Warning: No .jsonl files found in directory {dir_path}")
         return []
 
-    print(f"找到 {len(jsonl_files)} 个 JSONL 文件:")
+    print(f"Found {len(jsonl_files)} JSONL files:")
     for f in jsonl_files:
         print(f"  - {f.relative_to(dir_path) if f.is_relative_to(dir_path) else f}")
 
-    # 聚合所有数据
+    # Aggregate all data
     all_data = []
     for file_path in jsonl_files:
         try:
             data = load_from_file(file_path)
             all_data.extend(data)
         except Exception as e:
-            print(f"  ⚠ 跳过文件 {file_path.name}: {e}")
+            print(f"  ⚠ Skipping file {file_path.name}: {e}")
 
-    print(f"\n✓ 从 {len(jsonl_files)} 个文件中总共加载了 {len(all_data)} 条数据")
+    print(f"\n✓ Loaded a total of {len(all_data)} entries from {len(jsonl_files)} files")
     return all_data
 
 
 def deduplicate_data(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    去除重复的数据条目
+    Remove duplicate data entries
 
     Args:
-        data: 数据列表
+        data: Data list
 
     Returns:
-        去重后的数据列表
+        Deduplicated data list
     """
     seen = set()
     unique_data = []
 
     for entry in data:
-        # 使用 _id 或者整个 entry 的 JSON 字符串作为唯一标识
+        # Use _id or JSON string of entire entry as unique identifier
         if "_id" in entry and entry["_id"]:
             identifier = entry["_id"]
         else:
-            # 如果没有 _id，使用 context + input 组合作为唯一标识
+            # If no _id, use context + input combination as unique identifier
             identifier = f"{entry.get('context', '')[:100]}_{entry.get('input', '')[:100]}"
 
         if identifier not in seen:
@@ -201,7 +201,7 @@ def deduplicate_data(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     duplicates_removed = len(data) - len(unique_data)
     if duplicates_removed > 0:
-        print(f"  ℹ 去除了 {duplicates_removed} 条重复数据")
+        print(f"  ℹ Removed {duplicates_removed} duplicate entries")
 
     return unique_data
 
@@ -214,26 +214,26 @@ def convert_longbench_to_benchmarker(
     ensure_unique: bool = True
 ) -> List[Dict[str, str]]:
     """
-    转换 LongBench 数据为 dual_round_benchmarker 格式
+    Convert LongBench data to fluxperf format
 
     Args:
-        data: LongBench 格式的数据列表
-        num_samples: 抽取的样本数量 (None 表示全部)
-        format_type: 转换格式类型
-        shuffle: 是否随机打乱
-        ensure_unique: 是否确保数据唯一性（去重）
+        data: List of data in LongBench format
+        num_samples: Number of samples to extract (None means all)
+        format_type: Conversion format type
+        shuffle: Whether to randomly shuffle
+        ensure_unique: Whether to ensure data uniqueness (deduplication)
 
     Returns:
-        dual_round_benchmarker 格式的数据列表
+        List of data in fluxperf format
     """
-    # 去重
+    # Deduplication
     if ensure_unique:
         data = deduplicate_data(data)
 
-    # 如果请求的样本数超过可用数据，调整为实际可用数量
+    # If requested sample count exceeds available data, adjust to actual available count
     if num_samples is not None and num_samples > len(data):
-        print(f"  ⚠ 请求的样本数 ({num_samples}) 超过可用数据量 ({len(data)})")
-        print(f"  → 将使用所有 {len(data)} 条数据")
+        print(f"  ⚠ Requested sample count ({num_samples}) exceeds available data ({len(data)})")
+        print(f"  → Will use all {len(data)} entries")
         num_samples = len(data)
 
     if shuffle:
@@ -253,36 +253,36 @@ def convert_longbench_to_benchmarker(
 
 def get_recommended_format(dataset_name: str) -> str:
     """
-    根据数据集名称推荐转换格式
+    Recommend conversion format based on dataset name
 
     Args:
-        dataset_name: LongBench 数据集名称
+        dataset_name: LongBench dataset name
 
     Returns:
-        推荐的格式类型
+        Recommended format type
     """
-    # QA 任务: 需要 context + question
+    # QA tasks: require context + question
     qa_tasks = [
         "narrativeqa", "qasper", "multifieldqa_en", "multifieldqa_zh",
         "hotpotqa", "2wikimqa", "musique", "dureader"
     ]
 
-    # 摘要任务: 只需要 context
+    # Summarization tasks: only need context
     summarization_tasks = [
         "gov_report", "qmsum", "multi_news", "vcsum"
     ]
 
-    # Few-shot 任务: context 包含示例, input 是查询
+    # Few-shot tasks: context contains examples, input is query
     fewshot_tasks = [
         "trec", "triviaqa", "samsum", "lsht"
     ]
 
-    # 合成任务
+    # Synthetic tasks
     synthetic_tasks = [
         "passage_count", "passage_retrieval_en", "passage_retrieval_zh"
     ]
 
-    # 代码任务
+    # Code tasks
     code_tasks = [
         "lcc", "repobench-p"
     ]
@@ -294,39 +294,39 @@ def get_recommended_format(dataset_name: str) -> str:
     elif dataset_name in (fewshot_tasks + synthetic_tasks + code_tasks):
         return "concatenate"
     else:
-        return "context_question"  # 默认
+        return "context_question"  # default
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="将 LongBench 数据集转换为 dual_round_benchmarker 格式"
+        description="Convert LongBench dataset to fluxperf format"
     )
 
-    # 数据源选项
+    # Data source options
     source_group = parser.add_mutually_exclusive_group(required=True)
     source_group.add_argument(
         "--dataset",
         type=str,
         nargs='+',
-        help="LongBench 数据集名称 (支持多个,从 HuggingFace 下载)"
+        help="LongBench dataset name(s) (supports multiple, downloads from HuggingFace)"
     )
     source_group.add_argument(
         "--input-file",
         type=Path,
-        help="本地 LongBench 数据文件路径 (JSONL 或 JSON 格式)"
+        help="Local LongBench data file path (JSONL or JSON format)"
     )
     source_group.add_argument(
         "--input-dir",
         type=Path,
-        help="本地数据目录路径 (批量转换目录下所有 JSONL 文件)"
+        help="Local data directory path (batch convert all JSONL files in directory)"
     )
 
-    # 转换选项
+    # Conversion options
     parser.add_argument(
         "--num-samples",
         type=int,
         default=None,
-        help="抽取的样本数量 (默认: 全部)"
+        help="Number of samples to extract (default: all)"
     )
 
     parser.add_argument(
@@ -334,50 +334,50 @@ def main():
         type=str,
         choices=["context_question", "context_only", "question_only", "concatenate", "auto"],
         default="auto",
-        help="转换格式 (默认: auto - 根据数据集自动选择)"
+        help="Conversion format (default: auto - automatically select based on dataset)"
     )
 
     parser.add_argument(
         "--output",
         type=Path,
         required=True,
-        help="输出文件路径 (JSONL 格式，每行一个 JSON 对象)"
+        help="Output file path (JSONL format, one JSON object per line)"
     )
 
     parser.add_argument(
         "--no-shuffle",
         action="store_true",
-        help="不随机打乱数据"
+        help="Do not randomly shuffle data"
     )
 
     parser.add_argument(
         "--seed",
         type=int,
         default=42,
-        help="随机种子 (默认: 42)"
+        help="Random seed (default: 42)"
     )
 
     args = parser.parse_args()
 
-    # 设置随机种子
+    # Set random seed
     random.seed(args.seed)
 
-    # 加载数据
+    # Load data
     all_data = []
 
     if args.dataset:
-        # 从 HuggingFace 加载
+        # Load from HuggingFace
         for dataset_name in args.dataset:
             data = load_from_huggingface(dataset_name)
 
-            # 确定格式类型
+            # Determine format type
             if args.format == "auto":
                 format_type = get_recommended_format(dataset_name)
-                print(f"使用推荐格式: {format_type}")
+                print(f"Using recommended format: {format_type}")
             else:
                 format_type = args.format
 
-            # 转换数据
+            # Convert data
             converted = convert_longbench_to_benchmarker(
                 data,
                 num_samples=args.num_samples if len(args.dataset) == 1 else None,
@@ -386,7 +386,7 @@ def main():
             )
             all_data.extend(converted)
 
-        # 如果加载了多个数据集,在这里进行统一采样
+        # If multiple datasets loaded, perform unified sampling here
         if len(args.dataset) > 1:
             if args.num_samples and args.num_samples < len(all_data):
                 if not args.no_shuffle:
@@ -394,23 +394,23 @@ def main():
                 all_data = all_data[:args.num_samples]
 
     elif args.input_dir:
-        # 从目录批量加载所有 JSONL 文件
+        # Batch load all JSONL files from directory
         data = load_from_directory(args.input_dir)
 
-        # 确定格式类型
+        # Determine format type
         if args.format == "auto":
-            # 尝试从第一条数据推断数据集类型
+            # Try to infer dataset type from first entry
             if data:
                 dataset_name = data[0].get("dataset", "")
                 format_type = get_recommended_format(dataset_name)
-                print(f"检测到数据集类型: {dataset_name}, 使用推荐格式: {format_type}")
+                print(f"Detected dataset type: {dataset_name}, using recommended format: {format_type}")
             else:
                 format_type = "context_question"
-                print(f"使用默认格式: {format_type}")
+                print(f"Using default format: {format_type}")
         else:
             format_type = args.format
 
-        # 转换数据
+        # Convert data
         all_data = convert_longbench_to_benchmarker(
             data,
             num_samples=args.num_samples,
@@ -419,23 +419,23 @@ def main():
         )
 
     else:
-        # 从本地文件加载
+        # Load from local file
         data = load_from_file(args.input_file)
 
-        # 确定格式类型
+        # Determine format type
         if args.format == "auto":
-            # 尝试从第一条数据推断
+            # Try to infer from first entry
             if data:
                 dataset_name = data[0].get("dataset", "")
                 format_type = get_recommended_format(dataset_name)
-                print(f"检测到数据集: {dataset_name}, 使用推荐格式: {format_type}")
+                print(f"Detected dataset: {dataset_name}, using recommended format: {format_type}")
             else:
                 format_type = "context_question"
-                print(f"使用默认格式: {format_type}")
+                print(f"Using default format: {format_type}")
         else:
             format_type = args.format
 
-        # 转换数据
+        # Convert data
         all_data = convert_longbench_to_benchmarker(
             data,
             num_samples=args.num_samples,
@@ -443,22 +443,22 @@ def main():
             shuffle=not args.no_shuffle
         )
 
-    # 保存结果为 JSONL 格式（每行一个 JSON 对象）
+    # Save results as JSONL format (one JSON object per line)
     args.output.parent.mkdir(parents=True, exist_ok=True)
 
     with open(args.output, 'w', encoding='utf-8') as f:
         for entry in all_data:
-            # 每行写入一个 JSON 对象，不带缩进
+            # Write one JSON object per line, without indentation
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
 
     print(f"\n{'='*60}")
-    print(f"转换完成!")
+    print(f"Conversion complete!")
     print(f"{'='*60}")
-    print(f"总样本数: {len(all_data)}")
-    print(f"输出文件: {args.output}")
-    print(f"输出格式: JSONL (每行一个 JSON 对象)")
-    print(f"\n使用示例:")
-    print(f"python dual_round_benchmarker.py \\")
+    print(f"Total samples: {len(all_data)}")
+    print(f"Output file: {args.output}")
+    print(f"Output format: JSONL (one JSON object per line)")
+    print(f"\nUsage example:")
+    print(f"python fluxperf.py \\")
     print(f"  --dataset {args.output} \\")
     print(f"  --endpoint http://localhost:8000/v1/chat/completions \\")
     print(f"  --num-samples {min(10, len(all_data))} \\")

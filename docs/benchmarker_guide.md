@@ -1,186 +1,186 @@
-# Dual Round Benchmarker 完整指南
+# FluxPerf Complete Guide
 
-## 目录
-- [概述](#概述)
-- [安装和配置](#安装和配置)
-- [核心功能](#核心功能)
-- [性能指标](#性能指标)
-- [命令行参数](#命令行参数)
-- [输出格式](#输出格式)
-- [使用示例](#使用示例)
-- [SLO 配置](#slo-配置)
-- [Prometheus 集成](#prometheus-集成)
-- [故障排除](#故障排除)
-- [多轮对话与调试模式](#多轮对话与调试模式)
-
----
-
-## 概述
-
-`dual_round_benchmarker.py` 是一个专门设计用于测试 LLM API 服务性能的工具，特别适合评估缓存性能（如 KV 缓存、前缀缓存）。
-
-### 核心特性
-
-- **双轮测试**: 对同一批请求执行两次，用于对比缓存前后的性能差异
-- **多并发支持**: 可同时测试多个并发级别（如 5, 10, 20, 50）
-- **流式输出**: 支持 Server-Sent Events (SSE) 流式响应
-- **丰富的指标**: TTFT, ITL, Latency, Throughput, Goodput + Prometheus 自定义指标
-- **多种输出**: 命令行表格、CSV、JSON 三种格式
-- **SLO 约束**: 基于服务级别目标计算 Goodput
-
-### 双轮测试原理
-
-**第 1 轮**：冷启动，缓存未命中
-```
-请求 1 → API (无缓存) → 响应 1  ← TTFT 较高
-请求 2 → API (无缓存) → 响应 2
-...
-```
-
-**第 2 轮**：相同请求，缓存命中
-```
-请求 1 → API (缓存命中) → 响应 1  ← TTFT 降低
-请求 2 → API (缓存命中) → 响应 2
-...
-```
-
-通过对比两轮的性能指标，可以量化缓存的加速效果。
+## Table of Contents
+- [Overview](#overview)
+- [Installation and Configuration](#installation-and-configuration)
+- [Core Features](#core-features)
+- [Performance Metrics](#performance-metrics)
+- [Command-Line Arguments](#command-line-arguments)
+- [Output Formats](#output-formats)
+- [Usage Examples](#usage-examples)
+- [SLO Configuration](#slo-configuration)
+- [Prometheus Integration](#prometheus-integration)
+- [Troubleshooting](#troubleshooting)
+- [Multi-turn Conversations and Debug Mode](#multi-turn-conversations-and-debug-mode)
 
 ---
 
-## 安装和配置
+## Overview
 
-### 系统要求
+`fluxperf.py` is a tool specifically designed for testing LLM API service performance, particularly suitable for evaluating cache performance (such as KV cache, prefix cache).
+
+### Core Features
+
+- **Dual-Round Testing**: Execute two rounds on the same batch of requests to compare performance differences before and after caching
+- **Multi-Concurrency Support**: Simultaneously test multiple concurrency levels (e.g., 5, 10, 20, 50)
+- **Streaming Output**: Support for Server-Sent Events (SSE) streaming responses
+- **Rich Metrics**: TTFT, ITL, Latency, Throughput, Goodput + Prometheus custom metrics
+- **Multiple Outputs**: Command-line tables, CSV, and JSON formats
+- **SLO Constraints**: Calculate Goodput based on Service Level Objectives
+
+### Dual-Round Testing Principle
+
+**Round 1**: Cold start, cache miss
+```
+Request 1 → API (no cache) → Response 1  ← Higher TTFT
+Request 2 → API (no cache) → Response 2
+...
+```
+
+**Round 2**: Same requests, cache hit
+```
+Request 1 → API (cache hit) → Response 1  ← Lower TTFT
+Request 2 → API (cache hit) → Response 2
+...
+```
+
+By comparing performance metrics from both rounds, you can quantify the cache acceleration effect.
+
+---
+
+## Installation and Configuration
+
+### System Requirements
 
 - Python 3.8+
-- 支持 OpenAI Chat Completions API 格式的 LLM 服务
+- LLM service supporting OpenAI Chat Completions API format
 
-### 安装依赖
+### Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-依赖包：
-- `aiohttp>=3.8.0` - 异步 HTTP 客户端
-- `pyyaml>=6.0` - YAML 配置解析
-- `tqdm>=4.65.0` - 进度条显示
-- `prometheus-client>=0.16.0` - Prometheus 指标查询
+Dependencies:
+- `aiohttp>=3.8.0` - Async HTTP client
+- `pyyaml>=6.0` - YAML configuration parsing
+- `tqdm>=4.65.0` - Progress bar display
+- `prometheus-client>=0.16.0` - Prometheus metrics querying
 
 ---
 
-## 核心功能
+## Core Features
 
-### 1. 性能指标测量
+### 1. Performance Metric Measurement
 
 #### TTFT (Time to First Token)
-首 token 延迟，从发送请求到收到第一个 token 的时间。
+First token latency, time from sending request to receiving the first token.
 
-**影响因素**：
-- 模型加载时间
-- Prompt 处理时间
-- KV 缓存命中率
+**Influencing Factors**:
+- Model loading time
+- Prompt processing time
+- KV cache hit rate
 
 #### ITL (Inter-Token Latency)
-Token 间延迟，生成连续 token 之间的平均时间间隔。
+Token interval latency, average time interval between generating consecutive tokens.
 
-**计算方式**：
+**Calculation Method**:
 ```
-ITL = (总生成时间 - TTFT) / (生成的 token 数 - 1)
-```
-
-#### Latency (总延迟)
-从发送请求到收到完整响应的总时间。
-
-```
-Latency = TTFT + (ITL × 生成的 token 数)
+ITL = (Total generation time - TTFT) / (Number of tokens generated - 1)
 ```
 
-### 2. 吞吐量 (Throughput)
-
-- **Token 吞吐量**: 每秒生成的 token 数
-- **Request 吞吐量**: 每秒完成的请求数
+#### Latency (Total Latency)
+Total time from sending request to receiving complete response.
 
 ```
-Token Throughput = 总生成 tokens / 总时长
-Request Throughput = 总请求数 / 总时长
+Latency = TTFT + (ITL × Number of tokens generated)
 ```
 
-### 3. Goodput (有效吞吐量)
+### 2. Throughput
 
-满足 SLO 约束的有效吞吐量。
+- **Token Throughput**: Number of tokens generated per second
+- **Request Throughput**: Number of requests completed per second
 
 ```
-Goodput = (满足 SLO 的 tokens) / 总时长
+Token Throughput = Total generated tokens / Total duration
+Request Throughput = Total requests / Total duration
 ```
 
-### 4. Prometheus 指标集成
+### 3. Goodput (Effective Throughput)
 
-支持查询任意 Prometheus 指标，常用指标：
+Effective throughput that meets SLO constraints.
 
-- `lmcache_hit_rate`: 缓存命中率
-- `memory_usage_bytes`: 内存使用
-- `gpu_utilization`: GPU 利用率
-- `kv_cache_size`: KV 缓存大小
+```
+Goodput = (Tokens meeting SLO) / Total duration
+```
+
+### 4. Prometheus Metrics Integration
+
+Supports querying arbitrary Prometheus metrics, commonly used metrics:
+
+- `lmcache_hit_rate`: Cache hit rate
+- `memory_usage_bytes`: Memory usage
+- `gpu_utilization`: GPU utilization
+- `kv_cache_size`: KV cache size
 
 ---
 
-## 性能指标
+## Performance Metrics
 
-每个指标都包含以下统计值：
+Each metric includes the following statistical values:
 
-| 统计值 | 说明 | 用途 |
+| Statistic | Description | Purpose |
 |--------|------|------|
-| **Avg** | 平均值 | 整体性能水平 |
-| **P50** | 中位数 | 典型用户体验 |
-| **P90** | 90分位数 | 大部分用户体验 |
-| **P99** | 99分位数 | 尾部延迟 |
-| **Min** | 最小值 | 最佳性能 |
-| **Max** | 最大值 | 最差性能 |
-| **Stddev** | 标准差 | 性能稳定性 |
+| **Avg** | Average | Overall performance level |
+| **P50** | Median | Typical user experience |
+| **P90** | 90th percentile | Most users' experience |
+| **P99** | 99th percentile | Tail latency |
+| **Min** | Minimum | Best performance |
+| **Max** | Maximum | Worst performance |
+| **Stddev** | Standard deviation | Performance stability |
 
 ---
 
-## 命令行参数
+## Command-Line Arguments
 
-### 必需参数
+### Required Arguments
 
-| 参数 | 说明 | 示例 |
+| Argument | Description | Example |
 |------|------|------|
-| `--dataset` | 数据集文件路径 | `--dataset data/test.jsonl` |
-| `--endpoint` | API 端点 URL | `--endpoint http://localhost:8000/v1/chat/completions` |
+| `--dataset` | Dataset file path | `--dataset data/test.jsonl` |
+| `--endpoint` | API endpoint URL | `--endpoint http://localhost:8000/v1/chat/completions` |
 
-### 核心参数
+### Core Arguments
 
-| 参数 | 默认值 | 说明 |
+| Argument | Default | Description |
 |------|--------|------|
-| `--num-samples` | 全部 | 测试的样本数量 |
-| `--concurrency` | 1 | 并发数（可指定多个） |
-| `--model` | 自动 | 模型名称 |
-| `--timeout` | 300 | 请求超时（秒） |
+| `--num-samples` | All | Number of samples to test |
+| `--concurrency` | 1 | Concurrency (can specify multiple) |
+| `--model` | Auto | Model name |
+| `--timeout` | 300 | Request timeout (seconds) |
 
-### 可选参数
+### Optional Arguments
 
-| 参数 | 说明 |
+| Argument | Description |
 |------|------|
-| `--max-input-length` | 截断输入长度 |
-| `--max-output-tokens` | 限制最大生成 tokens |
-| `--temperature` | 生成温度 |
-| `--top-p` | Top-p 采样 |
-| `--output-dir` | 输出目录 |
-| `--slo-file` | SLO 配置文件 |
+| `--max-input-length` | Truncate input length |
+| `--max-output-tokens` | Limit maximum generated tokens |
+| `--temperature` | Generation temperature |
+| `--top-p` | Top-p sampling |
+| `--output-dir` | Output directory |
+| `--slo-file` | SLO configuration file |
 
-### Prometheus 参数
+### Prometheus Arguments
 
-| 参数 | 说明 |
+| Argument | Description |
 |------|------|
-| `--prometheus-url` | Prometheus 指标端点 |
-| `--prometheus-metrics` | 要查询的指标列表 |
+| `--prometheus-url` | Prometheus metrics endpoint |
+| `--prometheus-metrics` | List of metrics to query |
 
-### 完整示例
+### Complete Example
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset data/narrativeqa.jsonl \
   --endpoint http://localhost:8000/v1/chat/completions \
   --model meta-llama/Llama-3-8B \
@@ -198,16 +198,16 @@ python dual_round_benchmarker.py \
 
 ---
 
-## 输出格式
+## Output Formats
 
-### 1. 命令行表格输出
+### 1. Command-Line Table Output
 
 ```
 ========================================================================================================================
-并发: 10 | 第 1 轮性能指标
+Concurrency: 10 | Round 1 Performance Metrics
 ========================================================================================================================
-总请求数: 100 | 成功: 100 | 失败: 0 | 测试时长: 45.32 秒
-平均输入 tokens: 1024.5 | 平均输出 tokens: 256.3
+Total Requests: 100 | Success: 100 | Failed: 0 | Test Duration: 45.32 seconds
+Average Input Tokens: 1024.5 | Average Output Tokens: 256.3
 ------------------------------------------------------------------------------------------------------------------------
 │ Metric                       │ Avg          │ P50          │ P90          │ P99          │ Min          │ Max          │ Stddev       │
 ├──────────────────────────────┼──────────────┼──────────────┼──────────────┼──────────────┼──────────────┼──────────────┼──────────────┤
@@ -218,38 +218,38 @@ python dual_round_benchmarker.py \
 └──────────────────────────────┴──────────────┴──────────────┴──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘
 
 Throughput:
-  Token 吞吐量: 565.14 tokens/sec
-  Request 吞吐量: 2.21 requests/sec
+  Token Throughput: 565.14 tokens/sec
+  Request Throughput: 2.21 requests/sec
 
 Goodput (SLO):
-  满足 SLO 的请求数: 95 / 100 (95.00%)
-  满足 SLO 的 tokens: 24348 (95.12%)
+  Requests Meeting SLO: 95 / 100 (95.00%)
+  Tokens Meeting SLO: 24348 (95.12%)
 ```
 
-### 2. CSV 输出
+### 2. CSV Output
 
-文件: `results/metrics_summary.csv`
+File: `results/metrics_summary.csv`
 
 ```csv
-指标/轮次,并发5-第1轮,并发5-第2轮,并发10-第1轮,并发10-第2轮
+Metric/Round,Concurrency5-Round1,Concurrency5-Round2,Concurrency10-Round1,Concurrency10-Round2
 
 TTFT (ms)
-平均值,245.32,98.45,312.54,105.12
-中位数,238.15,95.20,305.23,102.11
+Average,245.32,98.45,312.54,105.12
+Median,238.15,95.20,305.23,102.11
 P90,289.45,145.67,378.12,145.23
 P99,312.45,156.30,398.45,156.78
-最小值,210.12,80.23,280.34,85.45
-最大值,350.67,190.34,450.12,210.23
-标准差,25.67,18.34,35.67,20.45
+Min,210.12,80.23,280.34,85.45
+Max,350.67,190.34,450.12,210.23
+Stddev,25.67,18.34,35.67,20.45
 
 ITL (ms)
-平均值,18.25,16.34,20.45,17.67
+Average,18.25,16.34,20.45,17.67
 ...
 ```
 
-### 3. JSON 输出
+### 3. JSON Output
 
-文件: `results/concurrency_10_round_1.json`
+File: `results/concurrency_10_round_1.json`
 
 ```json
 {
@@ -285,34 +285,34 @@ ITL (ms)
 
 ---
 
-## 多轮对话与调试模式
+## Multi-turn Conversations and Debug Mode
 
-### 多轮对话支持
+### Multi-turn Conversation Support
 
-自 v2 起，工具支持基于 session 的多轮对话数据集。输入 JSONL 可包含以下结构：
+Since v2, the tool supports session-based multi-turn conversation datasets. Input JSONL can contain the following structures:
 
 ```json
-{"session_id": "s1", "user_messages": ["问题1", "问题2"]}
+{"session_id": "s1", "user_messages": ["Question1", "Question2"]}
 {"conversations": [{"from": "human", "value": "hi"}, {"from": "gpt", "value": "hello"}, {"from": "human", "value": "how are you"}]}
-{"messages": [{"role": "user", "content": "问1"}, {"role": "assistant", "content": "答1"}, {"role": "user", "content": "问2"}]}
+{"messages": [{"role": "user", "content": "Q1"}, {"role": "assistant", "content": "A1"}, {"role": "user", "content": "Q2"}]}
 ```
 
-同一 session 会维护历史：
-1. 用户发问追加到对应会话历史
-2. 请求调用时携带历史 + 新问题
-3. 模型回复追加并根据 `--max-context-tokens` 从最早轮次截断
+The same session maintains history:
+1. User question appended to corresponding conversation history
+2. Request carries history + new question when called
+3. Model reply appended and truncated from earliest turn based on `--max-context-tokens`
 
-### Token 截断策略
+### Token Truncation Strategy
 
-- 仅在上下文 token 总数超过 `--max-context-tokens` 时生效
-- 截断从最早的问答轮开始删除，确保最新语境
+- Only takes effect when total context tokens exceed `--max-context-tokens`
+- Truncation starts from earliest Q&A turns, ensuring latest context
 
-### 调试模式
+### Debug Mode
 
-新增 `--debug` 与 `--debug-log-dir`，用于输出请求 payload、历史上下文、session 元数据。
+Added `--debug` and `--debug-log-dir` for outputting request payloads, history context, session metadata.
 
 ```
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset data/chat.jsonl \
   --endpoint http://localhost:8001/v1/chat/completions \
   --num-samples 4 \
@@ -321,17 +321,17 @@ python dual_round_benchmarker.py \
   --debug-log-dir debug_logs
 ```
 
-调试日志 JSON 包含：
+Debug log JSON contains:
 - `session_id` / `turn_index`
-- 全量请求消息列表
-- 当前上下文 token 数及截断次数
+- Complete request message list
+- Current context token count and truncation count
 
-### Mock 服务
+### Mock Service
 
-利用 `--mock-server` 启动内置 `llm_mocker.py`：
+Use `--mock-server` to start built-in `llm_mocker.py`:
 
 ```
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset examples/example_dataset.json \
   --mock-server \
   --mock-host 127.0.0.1 \
@@ -340,24 +340,24 @@ python dual_round_benchmarker.py \
   --concurrency 2
 ```
 
-Mock 输出包含 session/id 哈希，便于验证请求负载。
+Mock output includes session/id hash for verifying request payload.
 
-## 使用示例
+## Usage Examples
 
-### 示例 1: 基础测试
+### Example 1: Basic Test
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset examples/example_dataset.json \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 10 \
   --concurrency 5
 ```
 
-### 示例 2: 缓存性能评估
+### Example 2: Cache Performance Evaluation
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset data/narrativeqa.jsonl \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 50 \
@@ -367,14 +367,14 @@ python dual_round_benchmarker.py \
   --output-dir results/cache_test
 ```
 
-**预期结果**：
-- 第 1 轮: `lmcache_hit_rate ≈ 0.0`, TTFT 高
-- 第 2 轮: `lmcache_hit_rate > 0.8`, TTFT 显著降低
+**Expected Results**:
+- Round 1: `lmcache_hit_rate ≈ 0.0`, high TTFT
+- Round 2: `lmcache_hit_rate > 0.8`, significantly lower TTFT
 
-### 示例 3: 多并发压测
+### Example 3: Multi-Concurrency Stress Test
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset data/mixed.jsonl \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 200 \
@@ -382,12 +382,12 @@ python dual_round_benchmarker.py \
   --output-dir results/scaling_test
 ```
 
-查看 `results/scaling_test/metrics_summary.csv` 对比不同并发下的性能。
+View `results/scaling_test/metrics_summary.csv` to compare performance under different concurrency levels.
 
-### 示例 4: SLO 合规性测试
+### Example 4: SLO Compliance Test
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset data/production_queries.jsonl \
   --endpoint http://production:8000/v1/chat/completions \
   --num-samples 1000 \
@@ -398,20 +398,20 @@ python dual_round_benchmarker.py \
 
 ---
 
-## SLO 配置
+## SLO Configuration
 
-创建 `slo.yaml` 文件定义服务级别目标：
+Create `slo.yaml` file to define Service Level Objectives:
 
 ```yaml
 slo:
-  ttft_ms: 1000        # TTFT 必须 < 1000ms
-  itl_ms: 50           # ITL 必须 < 50ms
-  latency_ms: 10000    # 总延迟必须 < 10000ms
+  ttft_ms: 1000        # TTFT must be < 1000ms
+  itl_ms: 50           # ITL must be < 50ms
+  latency_ms: 10000    # Total latency must be < 10000ms
 ```
 
-**Goodput 计算规则**：
+**Goodput Calculation Rules**:
 
-只有同时满足所有 SLO 约束的请求才计入 Goodput：
+Only requests meeting all SLO constraints count toward Goodput:
 
 ```python
 if (ttft < slo.ttft_ms) AND (itl < slo.itl_ms) AND (latency < slo.latency_ms):
@@ -419,152 +419,152 @@ if (ttft < slo.ttft_ms) AND (itl < slo.itl_ms) AND (latency < slo.latency_ms):
     goodput_requests += 1
 ```
 
-**示例输出**：
+**Example Output**:
 
 ```
 Goodput (SLO):
-  满足 SLO 的请求数: 850 / 1000 (85.00%)
-  满足 SLO 的 tokens: 217600 / 256000 (85.00%)
+  Requests Meeting SLO: 850 / 1000 (85.00%)
+  Tokens Meeting SLO: 217600 / 256000 (85.00%)
 ```
 
 ---
 
-## Prometheus 集成
+## Prometheus Integration
 
-### 配置
+### Configuration
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --prometheus-url http://localhost:3001/metrics \
   --prometheus-metrics lmcache_hit_rate memory_usage_bytes gpu_utilization \
   ...
 ```
 
-### 指标查询
+### Metrics Querying
 
-工具会在测试前后查询 Prometheus 指标，并计算差值或平均值。
+The tool queries Prometheus metrics before and after tests, calculating differences or averages.
 
-**查询时机**：
-1. 每个请求发送前：记录 `metric_before`
-2. 每个请求完成后：记录 `metric_after`
-3. 计算：`metric_delta = metric_after - metric_before`
+**Query Timing**:
+1. Before each request: Record `metric_before`
+2. After each request: Record `metric_after`
+3. Calculate: `metric_delta = metric_after - metric_before`
 
-### 常用指标
+### Commonly Used Metrics
 
-| 指标名称 | 说明 | 典型值 |
+| Metric Name | Description | Typical Value |
 |----------|------|--------|
-| `lmcache_hit_rate` | 缓存命中率 | 0.0 - 1.0 |
-| `memory_usage_bytes` | 内存使用（字节） | 1GB - 100GB |
-| `gpu_utilization` | GPU 利用率 | 0.0 - 1.0 |
-| `kv_cache_size` | KV 缓存大小 | - |
-| `request_latency` | 请求延迟 | - |
+| `lmcache_hit_rate` | Cache hit rate | 0.0 - 1.0 |
+| `memory_usage_bytes` | Memory usage (bytes) | 1GB - 100GB |
+| `gpu_utilization` | GPU utilization | 0.0 - 1.0 |
+| `kv_cache_size` | KV cache size | - |
+| `request_latency` | Request latency | - |
 
-### 输出示例
+### Output Example
 
 ```
-Prometheus 指标
+Prometheus Metrics
 
 lmcache_hit_rate
-平均值  0.0000   0.8521   0.0012   0.9234
+Average  0.0000   0.8521   0.0012   0.9234
 P50     0.0000   0.8500   0.0000   0.9200
 P90     0.0000   0.9100   0.0050   0.9500
 P99     0.0000   0.9300   0.0100   0.9700
-最小值  0.0000   0.7800   0.0000   0.8900
-最大值  0.0000   0.9500   0.0200   0.9800
-标准差  0.0000   0.0420   0.0045   0.0280
+Min     0.0000   0.7800   0.0000   0.8900
+Max     0.0000   0.9500   0.0200   0.9800
+Stddev  0.0000   0.0420   0.0045   0.0280
 ```
 
 ---
 
-## 故障排除
+## Troubleshooting
 
-### 问题 1: 连接超时
+### Issue 1: Connection Timeout
 
-**错误信息**: `asyncio.TimeoutError` 或 `Connection timeout`
+**Error Message**: `asyncio.TimeoutError` or `Connection timeout`
 
-**解决方案**:
+**Solution**:
 ```bash
-# 增加超时时间
-python dual_round_benchmarker.py \
+# Increase timeout
+python fluxperf.py \
   --timeout 600 \
   ...
 ```
 
-### 问题 2: 所有请求失败
+### Issue 2: All Requests Failing
 
-**错误信息**: `成功: 0 | 失败: 100`
+**Error Message**: `Success: 0 | Failed: 100`
 
-**检查清单**:
-1. API 端点是否正确
-2. 服务是否启动
-3. 模型名称是否正确
-4. 查看 JSON 输出的错误详情
+**Checklist**:
+1. Is API endpoint correct?
+2. Is service running?
+3. Is model name correct?
+4. Check JSON output for error details
 
-### 问题 3: Goodput 为 0%
+### Issue 3: Goodput is 0%
 
-**原因**: SLO 配置过于严格
+**Reason**: SLO configuration too strict
 
-**解决方案**:
-1. 查看实际的性能指标
-2. 调整 SLO 配置为合理值
-3. 或者优化服务性能
+**Solution**:
+1. Review actual performance metrics
+2. Adjust SLO configuration to reasonable values
+3. Or optimize service performance
 
-### 问题 4: TTFT 异常高
+### Issue 4: Abnormally High TTFT
 
-**可能原因**:
-- 模型未加载到显存
-- 输入过长
-- 服务器负载过高
+**Possible Causes**:
+- Model not loaded into VRAM
+- Input too long
+- Server overloaded
 
-**检查**:
+**Check**:
 ```bash
-# 查看 Prometheus 指标
+# View Prometheus metrics
 --prometheus-metrics gpu_memory_usage model_load_time
 ```
 
-### 问题 5: 第 2 轮没有加速
+### Issue 5: No Acceleration in Round 2
 
-**可能原因**:
-- 缓存未启用
-- 请求格式不完全一致
-- 缓存容量不足被驱逐
+**Possible Causes**:
+- Cache not enabled
+- Request format not completely consistent
+- Cache capacity insufficient and evicted
 
-**检查**:
+**Check**:
 ```bash
-# 查看缓存命中率
+# View cache hit rate
 --prometheus-metrics lmcache_hit_rate kv_cache_eviction_count
 ```
 
 ---
 
-## 高级用法
+## Advanced Usage
 
-### 1. 自定义数据集
+### 1. Custom Dataset
 
-创建 JSONL 文件：
+Create JSONL file:
 
 ```
-{"text": "写一首关于春天的诗"}
-{"text": "解释量子纠缠的原理"}
-{"text": "推荐三本科幻小说"}
+{"text": "Write a poem about spring"}
+{"text": "Explain the principle of quantum entanglement"}
+{"text": "Recommend three science fiction novels"}
 ```
 
-### 2. 长文本测试
+### 2. Long Text Testing
 
 ```bash
-# 使用 LongBench 数据集
+# Use LongBench dataset
 python convert_longbench.py \
   --dataset narrativeqa \
   --num-samples 50 \
   --output data/long_context.jsonl
 
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset data/long_context.jsonl \
   --max-input-length 16384 \
   --endpoint http://localhost:8000/v1/chat/completions
 ```
 
-### 3. 批量测试脚本
+### 3. Batch Testing Script
 
 ```bash
 #!/bin/bash
@@ -572,7 +572,7 @@ CONCURRENCIES="1 5 10 20 50 100"
 
 for conc in $CONCURRENCIES; do
     echo "Testing concurrency: $conc"
-    python dual_round_benchmarker.py \
+    python fluxperf.py \
       --dataset data/test.jsonl \
       --endpoint http://localhost:8000/v1/chat/completions \
       --num-samples 100 \
@@ -583,74 +583,74 @@ done
 
 ---
 
-## 性能优化建议
+## Performance Optimization Recommendations
 
-### 1. 并发数选择
+### 1. Concurrency Selection
 
-- **低并发 (1-5)**: 测试单请求性能
-- **中并发 (10-20)**: 常见生产场景
-- **高并发 (50-100)**: 压力测试
+- **Low Concurrency (1-5)**: Test single request performance
+- **Medium Concurrency (10-20)**: Common production scenarios
+- **High Concurrency (50-100)**: Stress testing
 
-### 2. 样本数选择
+### 2. Sample Count Selection
 
-- **快速测试**: 10-50 样本
-- **常规测试**: 100-500 样本
-- **生产验证**: 1000+ 样本
+- **Quick Test**: 10-50 samples
+- **Regular Test**: 100-500 samples
+- **Production Validation**: 1000+ samples
 
-### 3. 超时设置
+### 3. Timeout Setting
 
-根据输出长度调整：
+Adjust based on output length:
 
 ```
-timeout = TTFT_expected + (max_tokens × ITL_expected) + 缓冲时间
+timeout = Expected_TTFT + (max_tokens × Expected_ITL) + Buffer_time
 ```
 
-示例：
-- 短输出 (< 100 tokens): `--timeout 60`
-- 中等输出 (100-500 tokens): `--timeout 300`
-- 长输出 (> 500 tokens): `--timeout 600`
+Examples:
+- Short output (< 100 tokens): `--timeout 60`
+- Medium output (100-500 tokens): `--timeout 300`
+- Long output (> 500 tokens): `--timeout 600`
 
 ---
 
-## 输出文件说明
+## Output Files Description
 
-测试完成后，`--output-dir` 目录包含：
+After testing completes, the `--output-dir` directory contains:
 
 ```
 results/
-├── metrics_summary.csv              # 所有并发的汇总对比
-├── concurrency_5_round_1.json       # 并发5第1轮详细数据
-├── concurrency_5_round_2.json       # 并发5第2轮详细数据
-├── concurrency_10_round_1.json      # 并发10第1轮详细数据
-└── concurrency_10_round_2.json      # 并发10第2轮详细数据
+├── metrics_summary.csv              # Summary comparison of all concurrency levels
+├── concurrency_5_round_1.json       # Detailed data for concurrency 5 round 1
+├── concurrency_5_round_2.json       # Detailed data for concurrency 5 round 2
+├── concurrency_10_round_1.json      # Detailed data for concurrency 10 round 1
+└── concurrency_10_round_2.json      # Detailed data for concurrency 10 round 2
 ```
 
-### CSV 文件结构
+### CSV File Structure
 
-横向对比所有测试配置：
+Horizontal comparison of all test configurations:
 
-| 指标/轮次 | 并发5-第1轮 | 并发5-第2轮 | 并发10-第1轮 | 并发10-第2轮 |
+| Metric/Round | Concurrency5-Round1 | Concurrency5-Round2 | Concurrency10-Round1 | Concurrency10-Round2 |
 |-----------|-------------|-------------|--------------|--------------|
-| TTFT-平均值 | 245.32 | 98.45 | 312.54 | 105.12 |
+| TTFT-Average | 245.32 | 98.45 | 312.54 | 105.12 |
 | TTFT-P99 | 312.45 | 156.30 | 398.45 | 156.78 |
 | ... | ... | ... | ... | ... |
 
-### JSON 文件结构
+### JSON File Structure
 
-包含请求级别的详细数据，便于程序化分析。
-
----
-
-## 相关工具
-
-- **convert_longbench.py**: 数据集转换工具
-- **test_jsonl_output.py**: JSONL 格式验证
-- **test_prometheus.py**: Prometheus 连接测试
+Contains request-level detailed data for programmatic analysis.
 
 ---
 
-## 参考资料
+## Related Tools
+
+- **convert_longbench.py**: Dataset conversion tool
+- **test_jsonl_output.py**: JSONL format validation
+- **test_prometheus.py**: Prometheus connection testing
+
+---
+
+## References
 
 - [OpenAI Chat Completions API](https://platform.openai.com/docs/api-reference/chat)
-- [Prometheus 文档](https://prometheus.io/docs/)
-- [LongBench 数据集](https://github.com/THUDM/LongBench)
+- [Prometheus Documentation](https://prometheus.io/docs/)
+- [LongBench Dataset](https://github.com/THUDM/LongBench)

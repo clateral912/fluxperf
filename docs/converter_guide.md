@@ -1,47 +1,47 @@
-# LongBench 数据转换器完整指南
+# LongBench Data Converter Complete Guide
 
-## 目录
-- [概述](#概述)
-- [安装](#安装)
-- [数据格式](#数据格式)
-- [使用方法](#使用方法)
-- [命令行参数](#命令行参数)
-- [支持的数据集](#支持的数据集)
-- [转换格式类型](#转换格式类型)
-- [核心功能](#核心功能)
-- [使用示例](#使用示例)
-- [故障排除](#故障排除)
-
----
-
-## 概述
-
-`convert_longbench.py` 将 LongBench 格式的数据集转换为 `dual_round_benchmarker.py` 可用的 JSONL 格式。
-
-### 核心特性
-
-- ✅ **三种数据源**:
-  - HuggingFace 自动下载
-  - 本地单个文件
-  - 本地目录批量转换
-- ✅ **智能去重**: 自动识别并去除重复数据
-- ✅ **采样保护**: 防止重复采样
-- ✅ **格式推荐**: 根据数据集类型自动选择最佳格式
-- ✅ **JSONL 输出**: 每行一个 JSON 对象
+## Table of Contents
+- [Overview](#overview)
+- [Installation](#installation)
+- [Data Formats](#data-formats)
+- [Usage](#usage)
+- [Command-Line Arguments](#command-line-arguments)
+- [Supported Datasets](#supported-datasets)
+- [Conversion Format Types](#conversion-format-types)
+- [Core Features](#core-features)
+- [Usage Examples](#usage-examples)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
-## 安装
+## Overview
 
-### 基础依赖（必需）
+`convert_longbench.py` converts LongBench format datasets into JSONL format usable by `fluxperf.py`.
+
+### Core Features
+
+- ✅ **Three Data Sources**:
+  - HuggingFace automatic download
+  - Local single file
+  - Local directory batch conversion
+- ✅ **Smart Deduplication**: Automatically identifies and removes duplicate data
+- ✅ **Sampling Protection**: Prevents duplicate sampling
+- ✅ **Format Recommendation**: Automatically selects best format based on dataset type
+- ✅ **JSONL Output**: One JSON object per line
+
+---
+
+## Installation
+
+### Basic Dependencies (Required)
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### HuggingFace 支持（可选）
+### HuggingFace Support (Optional)
 
-仅在从 HuggingFace 下载数据时需要：
+Only required when downloading data from HuggingFace:
 
 ```bash
 pip install datasets
@@ -49,9 +49,9 @@ pip install datasets
 
 ---
 
-## 数据格式
+## Data Formats
 
-### 输入格式: LongBench
+### Input Format: LongBench
 
 ```json
 {
@@ -64,28 +64,28 @@ pip install datasets
 }
 ```
 
-### 输出格式: JSONL
+### Output Format: JSONL
 
-每行一个独立的 JSON 对象：
+One independent JSON object per line:
 
 ```
-{"text": "Once upon a time, there was a brave knight named Arthur...\n\n问题: What is the name of the main character?"}
-{"text": "Another long document here...\n\n问题: Another question?"}
+{"text": "Once upon a time, there was a brave knight named Arthur...\n\nQuestion: What is the name of the main character?"}
+{"text": "Another long document here...\n\nQuestion: Another question?"}
 ```
 
-**JSONL 特点**:
-- ✅ 每行一个完整的 JSON 对象
-- ✅ 行之间没有逗号
-- ✅ 没有方括号包裹
-- ✅ 可逐行流式处理
+**JSONL Characteristics**:
+- ✅ One complete JSON object per line
+- ✅ No commas between lines
+- ✅ No wrapping square brackets
+- ✅ Can process line by line in streaming fashion
 
 ---
 
-## 使用方法
+## Usage
 
-### 1. 从 HuggingFace 下载并转换
+### 1. Download and Convert from HuggingFace
 
-**单个数据集**:
+**Single Dataset**:
 ```bash
 python convert_longbench.py \
   --dataset narrativeqa \
@@ -93,7 +93,7 @@ python convert_longbench.py \
   --output data/narrativeqa.jsonl
 ```
 
-**多个数据集混合**:
+**Multiple Datasets Mixed**:
 ```bash
 python convert_longbench.py \
   --dataset narrativeqa qasper hotpotqa \
@@ -101,7 +101,7 @@ python convert_longbench.py \
   --output data/mixed_qa.jsonl
 ```
 
-### 2. 从本地文件转换
+### 2. Convert from Local File
 
 ```bash
 python convert_longbench.py \
@@ -110,7 +110,7 @@ python convert_longbench.py \
   --output data/narrativeqa.jsonl
 ```
 
-### 3. 从目录批量转换（推荐）
+### 3. Batch Convert from Directory (Recommended)
 
 ```bash
 python convert_longbench.py \
@@ -119,85 +119,85 @@ python convert_longbench.py \
   --output data/batch_all.jsonl
 ```
 
-**功能特性**:
-- 递归扫描所有 `.jsonl` 文件（包括子目录）
-- 自动聚合所有数据
-- 自动去重
-- 采样保护（不重复采样）
+**Features**:
+- Recursively scans all `.jsonl` files (including subdirectories)
+- Automatically aggregates all data
+- Automatic deduplication
+- Sampling protection (no duplicate sampling)
 
 ---
 
-## 命令行参数
+## Command-Line Arguments
 
-### 数据源参数（三选一）
+### Data Source Arguments (Choose One)
 
-| 参数 | 类型 | 说明 | 示例 |
+| Argument | Type | Description | Example |
 |------|------|------|------|
-| `--dataset` | str[] | HuggingFace 数据集名称 | `--dataset narrativeqa qasper` |
-| `--input-file` | Path | 本地文件路径 | `--input-file data/test.jsonl` |
-| `--input-dir` | Path | 本地目录路径 | `--input-dir LongBench_data/` |
+| `--dataset` | str[] | HuggingFace dataset name | `--dataset narrativeqa qasper` |
+| `--input-file` | Path | Local file path | `--input-file data/test.jsonl` |
+| `--input-dir` | Path | Local directory path | `--input-dir LongBench_data/` |
 
-### 转换参数
+### Conversion Arguments
 
-| 参数 | 默认值 | 说明 |
+| Argument | Default | Description |
 |------|--------|------|
-| `--num-samples` | 全部 | 抽取样本数量 |
-| `--format` | auto | 转换格式类型 |
-| `--output` | **必需** | 输出文件路径 (.jsonl) |
-| `--no-shuffle` | False | 不随机打乱数据 |
-| `--seed` | 42 | 随机种子 |
+| `--num-samples` | All | Number of samples to extract |
+| `--format` | auto | Conversion format type |
+| `--output` | **Required** | Output file path (.jsonl) |
+| `--no-shuffle` | False | Don't randomly shuffle data |
+| `--seed` | 42 | Random seed |
 
 ---
 
-## 支持的数据集
+## Supported Datasets
 
-### 英文数据集
+### English Datasets
 
 **Single-Document QA**:
-- `narrativeqa` - 长篇小说问答
-- `qasper` - 学术论文问答
-- `multifieldqa_en` - 多领域问答
+- `narrativeqa` - Long novel Q&A
+- `qasper` - Academic paper Q&A
+- `multifieldqa_en` - Multi-field Q&A
 
 **Multi-Document QA**:
-- `hotpotqa` - 多跳推理
-- `2wikimqa` - 维基百科问答
-- `musique` - 多步推理
+- `hotpotqa` - Multi-hop reasoning
+- `2wikimqa` - Wikipedia Q&A
+- `musique` - Multi-step reasoning
 
 **Summarization**:
-- `gov_report` - 政府报告摘要
-- `qmsum` - 会议摘要
-- `multi_news` - 新闻摘要
+- `gov_report` - Government report summary
+- `qmsum` - Meeting summary
+- `multi_news` - News summary
 
 **Few-shot Learning**:
-- `trec` - 问题分类
-- `triviaqa` - 百科知识
-- `samsum` - 对话摘要
+- `trec` - Question classification
+- `triviaqa` - Encyclopedic knowledge
+- `samsum` - Dialogue summary
 
 **Synthetic Tasks**:
-- `passage_count` - 段落计数
-- `passage_retrieval_en` - 段落检索
+- `passage_count` - Passage counting
+- `passage_retrieval_en` - Passage retrieval
 
 **Code**:
-- `lcc` - 长代码补全
-- `repobench-p` - 代码库补全
+- `lcc` - Long code completion
+- `repobench-p` - Repository completion
 
-### 中文数据集
+### Chinese Datasets
 
-- `multifieldqa_zh` - 多领域问答
-- `dureader` - 百度阅读理解
-- `vcsum` - 视频字幕摘要
-- `lsht` - 文本分类
-- `passage_retrieval_zh` - 段落检索
+- `multifieldqa_zh` - Multi-field Q&A
+- `dureader` - Baidu Reading Comprehension
+- `vcsum` - Video caption summary
+- `lsht` - Text classification
+- `passage_retrieval_zh` - Passage retrieval
 
 ---
 
-## 转换格式类型
+## Conversion Format Types
 
-### 1. `context_question` (默认)
+### 1. `context_question` (Default)
 
-适用于 **QA 任务**。
+Suitable for **QA Tasks**.
 
-**输入**:
+**Input**:
 ```json
 {
   "context": "Arthur was a brave knight...",
@@ -205,16 +205,16 @@ python convert_longbench.py \
 }
 ```
 
-**输出**:
+**Output**:
 ```json
-{"text": "Arthur was a brave knight...\n\n问题: Who was Arthur?"}
+{"text": "Arthur was a brave knight...\n\nQuestion: Who was Arthur?"}
 ```
 
 ### 2. `context_only`
 
-适用于 **摘要任务**。
+Suitable for **Summarization Tasks**.
 
-**输入**:
+**Input**:
 ```json
 {
   "context": "Long government report...",
@@ -222,16 +222,16 @@ python convert_longbench.py \
 }
 ```
 
-**输出**:
+**Output**:
 ```json
 {"text": "Long government report..."}
 ```
 
 ### 3. `concatenate`
 
-适用于 **Few-shot 和合成任务**。
+Suitable for **Few-shot and Synthetic Tasks**.
 
-**输入**:
+**Input**:
 ```json
 {
   "context": "Example 1: ...\nExample 2: ...",
@@ -239,71 +239,71 @@ python convert_longbench.py \
 }
 ```
 
-**输出**:
+**Output**:
 ```json
 {"text": "Example 1: ...\nExample 2: ...\nQuery text"}
 ```
 
-### 4. `auto` (推荐)
+### 4. `auto` (Recommended)
 
-根据数据集类型自动选择：
+Automatically selects based on dataset type:
 
-| 数据集类型 | 自动选择格式 |
+| Dataset Type | Auto-Selected Format |
 |------------|--------------|
-| QA 任务 | `context_question` |
-| 摘要任务 | `context_only` |
+| QA Tasks | `context_question` |
+| Summarization Tasks | `context_only` |
 | Few-shot | `concatenate` |
-| 合成任务 | `concatenate` |
-| 代码任务 | `concatenate` |
+| Synthetic Tasks | `concatenate` |
+| Code Tasks | `concatenate` |
 
 ---
 
-## 核心功能
+## Core Features
 
-### 1. 智能去重
+### 1. Smart Deduplication
 
-**去重逻辑**:
+**Deduplication Logic**:
 
 ```python
-# 优先使用 _id
+# Prioritize using _id
 if "_id" in entry and entry["_id"]:
     identifier = entry["_id"]
 else:
-    # 使用 context + input 前 100 字符
+    # Use first 100 characters of context + input
     identifier = f"{context[:100]}_{input[:100]}"
 ```
 
-**输出示例**:
+**Output Example**:
 ```
-✓ 从 4 个文件中总共加载了 370 条数据
-  ℹ 去除了 15 条重复数据
-```
-
-### 2. 采样保护
-
-**问题**: 用户请求 500 条样本，但去重后只有 300 条。
-
-**解决方案**: 自动调整为 300 条，**绝不重复采样**。
-
-```
-⚠ 请求的样本数 (500) 超过可用数据量 (300)
-→ 将使用所有 300 条数据
+✓ Loaded a total of 370 entries from 4 files
+  ℹ Removed 15 duplicate entries
 ```
 
-### 3. 目录批量转换
+### 2. Sampling Protection
 
-**场景**: 多个 JSONL 文件在同一目录
+**Problem**: User requests 500 samples, but only 300 remain after deduplication.
+
+**Solution**: Automatically adjust to 300, **never duplicate sampling**.
+
+```
+⚠ Requested sample count (500) exceeds available data (300)
+→ Will use all 300 entries
+```
+
+### 3. Directory Batch Conversion
+
+**Scenario**: Multiple JSONL files in same directory
 
 ```
 LongBench_data/
-├── narrativeqa.jsonl      (100 条)
-├── qasper.jsonl           (80 条)
-├── hotpotqa.jsonl         (120 条)
+├── narrativeqa.jsonl      (100 entries)
+├── qasper.jsonl           (80 entries)
+├── hotpotqa.jsonl         (120 entries)
 └── subfolder/
-    └── dureader.jsonl     (70 条)
+    └── dureader.jsonl     (70 entries)
 ```
 
-**命令**:
+**Command**:
 ```bash
 python convert_longbench.py \
   --input-dir LongBench_data/ \
@@ -311,56 +311,56 @@ python convert_longbench.py \
   --output data/mixed.jsonl
 ```
 
-**输出**:
+**Output**:
 ```
-正在扫描目录: LongBench_data/
-找到 4 个 JSONL 文件:
+Scanning directory: LongBench_data/
+Found 4 JSONL files:
   - narrativeqa.jsonl
   - qasper.jsonl
   - hotpotqa.jsonl
   - subfolder/dureader.jsonl
 
-✓ 从 4 个文件中总共加载了 370 条数据
-  ℹ 去除了 5 条重复数据
+✓ Loaded a total of 370 entries from 4 files
+  ℹ Removed 5 duplicate entries
 
-转换完成!
-总样本数: 200
-输出文件: data/mixed.jsonl
-输出格式: JSONL (每行一个 JSON 对象)
+Conversion complete!
+Total samples: 200
+Output file: data/mixed.jsonl
+Output format: JSONL (one JSON object per line)
 ```
 
 ---
 
-## 使用示例
+## Usage Examples
 
-### 示例 1: 快速测试数据
+### Example 1: Quick Test Data
 
 ```bash
-# 下载 narrativeqa，取 50 条
+# Download narrativeqa, take 50 entries
 python convert_longbench.py \
   --dataset narrativeqa \
   --num-samples 50 \
   --output data/test.jsonl
 
-# 运行压测
-python dual_round_benchmarker.py \
+# Run stress test
+python fluxperf.py \
   --dataset data/test.jsonl \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 20 \
   --concurrency 5
 ```
 
-### 示例 2: 混合多任务数据集
+### Example 2: Mixed Multi-Task Dataset
 
 ```bash
-# 混合 QA、摘要、推理任务
+# Mix QA, summary, reasoning tasks
 python convert_longbench.py \
   --dataset narrativeqa gov_report hotpotqa \
   --num-samples 150 \
   --output data/mixed_tasks.jsonl
 
-# 多并发压测
-python dual_round_benchmarker.py \
+# Multi-concurrency stress test
+python fluxperf.py \
   --dataset data/mixed_tasks.jsonl \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 100 \
@@ -368,17 +368,17 @@ python dual_round_benchmarker.py \
   --output-dir results/mixed
 ```
 
-### 示例 3: 本地文件批量转换
+### Example 3: Batch Convert Local Files
 
 ```bash
-# 假设你已经下载了多个 LongBench 数据集到 LongBench_data/
+# Assuming you've downloaded multiple LongBench datasets to LongBench_data/
 python convert_longbench.py \
   --input-dir LongBench_data/ \
   --num-samples 300 \
   --output data/all_longbench.jsonl
 
-# 长文本压测
-python dual_round_benchmarker.py \
+# Long text stress test
+python fluxperf.py \
   --dataset data/all_longbench.jsonl \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 200 \
@@ -389,17 +389,17 @@ python dual_round_benchmarker.py \
   --output-dir results/longbench
 ```
 
-### 示例 4: 中文数据集
+### Example 4: Chinese Datasets
 
 ```bash
-# 中文 QA + 摘要
+# Chinese QA + summary
 python convert_longbench.py \
   --dataset dureader vcsum multifieldqa_zh \
   --num-samples 100 \
   --output data/chinese.jsonl
 
-# 测试中文模型
-python dual_round_benchmarker.py \
+# Test Chinese model
+python fluxperf.py \
   --dataset data/chinese.jsonl \
   --endpoint http://localhost:8000/v1/chat/completions \
   --model qwen-7b \
@@ -407,17 +407,17 @@ python dual_round_benchmarker.py \
   --concurrency 10
 ```
 
-### 示例 5: 自定义格式
+### Example 5: Custom Format
 
 ```bash
-# 强制使用 context_only 格式
+# Force use of context_only format
 python convert_longbench.py \
   --dataset narrativeqa \
   --format context_only \
   --num-samples 100 \
   --output data/context_only.jsonl
 
-# 不打乱顺序，固定随机种子
+# Don't shuffle, fixed random seed
 python convert_longbench.py \
   --dataset qasper \
   --no-shuffle \
@@ -428,100 +428,100 @@ python convert_longbench.py \
 
 ---
 
-## 故障排除
+## Troubleshooting
 
-### 问题 1: ModuleNotFoundError: No module named 'datasets'
+### Issue 1: ModuleNotFoundError: No module named 'datasets'
 
-**错误**:
+**Error**:
 ```
-ImportError: 需要安装 datasets 库来从 HuggingFace 下载数据。
-运行: pip install datasets
+ImportError: Need to install datasets library to download from HuggingFace.
+Run: pip install datasets
 ```
 
-**解决方案**:
+**Solution**:
 ```bash
-# 方案 1: 安装 datasets 库
+# Option 1: Install datasets library
 pip install datasets
 
-# 方案 2: 使用本地文件
+# Option 2: Use local file
 python convert_longbench.py \
   --input-file LongBench_data/narrativeqa.jsonl \
   --output data/output.jsonl
 ```
 
-### 问题 2: HuggingFace 连接超时
+### Issue 2: HuggingFace Connection Timeout
 
-**错误**: `Connection timeout` 或下载速度慢
+**Error**: `Connection timeout` or slow download
 
-**解决方案**:
+**Solution**:
 
 ```bash
-# 设置 HuggingFace 镜像
+# Set HuggingFace mirror
 export HF_ENDPOINT=https://hf-mirror.com
 
-# 或手动下载数据文件后使用 --input-file
+# Or manually download data files then use --input-file
 wget https://huggingface.co/datasets/THUDM/LongBench/resolve/main/data.zip
 unzip data.zip -d LongBench_data/
 python convert_longbench.py --input-dir LongBench_data/ ...
 ```
 
-### 问题 3: 目录中未找到 JSONL 文件
+### Issue 3: No JSONL Files Found in Directory
 
-**错误**:
+**Error**:
 ```
-⚠ 警告: 目录 LongBench_data/ 中未找到任何 .jsonl 文件
+⚠ Warning: No .jsonl files found in directory LongBench_data/
 ```
 
-**解决方案**:
+**Solution**:
 
-检查目录结构：
+Check directory structure:
 ```bash
 ls -R LongBench_data/
 ```
 
-确保文件扩展名为 `.jsonl`，不是 `.json` 或其他格式。
+Ensure file extension is `.jsonl`, not `.json` or other formats.
 
-### 问题 4: 转换后的文本过长
+### Issue 4: Converted Text Too Long
 
-**问题**: 超过模型的最大输入长度
+**Problem**: Exceeds model's maximum input length
 
-**解决方案**:
+**Solution**:
 
-在运行 benchmarker 时截断：
+Truncate when running benchmarker:
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset data/output.jsonl \
   --max-input-length 8192 \
   ...
 ```
 
-### 问题 5: 去重后数据量不足
+### Issue 5: Insufficient Data After Deduplication
 
-**场景**:
+**Scenario**:
 ```
-✓ 从 5 个文件中总共加载了 200 条数据
-  ℹ 去除了 150 条重复数据
-  ⚠ 请求的样本数 (100) 超过可用数据量 (50)
-  → 将使用所有 50 条数据
+✓ Loaded a total of 200 entries from 5 files
+  ℹ Removed 150 duplicate entries
+  ⚠ Requested sample count (100) exceeds available data (50)
+  → Will use all 50 entries
 ```
 
-**解决方案**:
+**Solution**:
 
-1. 增加源文件数量
-2. 调整 `--num-samples` 为合理值
-3. 检查是否有文件重复
+1. Increase number of source files
+2. Adjust `--num-samples` to reasonable value
+3. Check for duplicate files
 
 ---
 
-## 高级用法
+## Advanced Usage
 
-### 批量转换所有 LongBench 数据集
+### Batch Convert All LongBench Datasets
 
 ```bash
 #!/bin/bash
 mkdir -p data/longbench
 
-# 所有英文 QA 数据集
+# All English QA datasets
 qa_datasets=(
     "narrativeqa"
     "qasper"
@@ -531,54 +531,54 @@ qa_datasets=(
     "musique"
 )
 
-# 批量转换
+# Batch conversion
 for dataset in "${qa_datasets[@]}"; do
-    echo "正在转换: $dataset"
+    echo "Converting: $dataset"
     python convert_longbench.py \
         --dataset "$dataset" \
         --num-samples 100 \
         --output "data/longbench/${dataset}.jsonl"
 done
 
-echo "批量转换完成!"
+echo "Batch conversion complete!"
 ```
 
-### 验证输出格式
+### Validate Output Format
 
 ```bash
-# 验证 JSONL 格式
+# Validate JSONL format
 python tests/test_jsonl_output.py data/output.jsonl
 
-# 输出示例:
-# 测试文件: data/output.jsonl
-# ✅ JSONL 格式正确!
-#    总行数: 100
-#    有效对象数: 100
+# Example output:
+# Test file: data/output.jsonl
+# ✅ JSONL format correct!
+#    Total lines: 100
+#    Valid objects: 100
 #
-# 第一个对象示例:
-#   键: ['text']
-#   text 预览: Once upon a time...
+# First object example:
+#   Keys: ['text']
+#   text preview: Once upon a time...
 ```
 
-### 手动转换格式（如果需要）
+### Manual Format Conversion (If Needed)
 
-**JSON 数组 → JSONL**:
+**JSON Array → JSONL**:
 
 ```python
 #!/usr/bin/env python3
 import json
 
-# 读取 JSON 数组
+# Read JSON array
 with open('old_format.json', 'r') as f:
     data = json.load(f)
 
-# 写入 JSONL
+# Write JSONL
 with open('new_format.jsonl', 'w') as f:
     for entry in data:
         f.write(json.dumps(entry, ensure_ascii=False) + '\n')
 ```
 
-或使用命令行工具 `jq`:
+Or use command-line tool `jq`:
 
 ```bash
 cat old_format.json | jq -c '.[]' > new_format.jsonl
@@ -586,35 +586,35 @@ cat old_format.json | jq -c '.[]' > new_format.jsonl
 
 ---
 
-## 数据集统计
+## Dataset Statistics
 
-### 平均长度（tokens）
+### Average Length (tokens)
 
-| 数据集 | 平均长度 | 任务类型 |
+| Dataset | Average Length | Task Type |
 |--------|----------|----------|
-| narrativeqa | 18K | 长篇小说 QA |
-| qasper | 5K | 学术论文 QA |
-| gov_report | 9K | 政府报告摘要 |
-| hotpotqa | 3K | 多文档 QA |
-| multifieldqa | 4K | 多领域 QA |
+| narrativeqa | 18K | Long novel QA |
+| qasper | 5K | Academic paper QA |
+| gov_report | 9K | Government report summary |
+| hotpotqa | 3K | Multi-document QA |
+| multifieldqa | 4K | Multi-field QA |
 
-### 推荐配置
+### Recommended Configuration
 
-根据数据集平均长度选择参数：
+Choose parameters based on dataset average length:
 
-**短文本 (< 2K tokens)**:
+**Short Text (< 2K tokens)**:
 ```bash
 --max-input-length 4096
 --timeout 60
 ```
 
-**中等长度 (2K - 8K tokens)**:
+**Medium Length (2K - 8K tokens)**:
 ```bash
 --max-input-length 8192
 --timeout 300
 ```
 
-**长文本 (> 8K tokens)**:
+**Long Text (> 8K tokens)**:
 ```bash
 --max-input-length 16384
 --timeout 600
@@ -622,29 +622,29 @@ cat old_format.json | jq -c '.[]' > new_format.jsonl
 
 ---
 
-## 完整工作流
+## Complete Workflow
 
-### 端到端示例
+### End-to-End Example
 
 ```bash
-# 1. 转换数据
+# 1. Convert data
 python convert_longbench.py \
   --dataset narrativeqa \
   --num-samples 100 \
   --output data/narrativeqa.jsonl
 
-# 2. 验证格式
+# 2. Validate format
 python tests/test_jsonl_output.py data/narrativeqa.jsonl
 
-# 3. 小规模测试
-python dual_round_benchmarker.py \
+# 3. Small-scale test
+python fluxperf.py \
   --dataset data/narrativeqa.jsonl \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 5 \
   --concurrency 1
 
-# 4. 正式压测
-python dual_round_benchmarker.py \
+# 4. Formal stress test
+python fluxperf.py \
   --dataset data/narrativeqa.jsonl \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 50 \
@@ -655,15 +655,15 @@ python dual_round_benchmarker.py \
   --slo-file examples/slo_example.yaml \
   --output-dir results/narrativeqa
 
-# 5. 分析结果
+# 5. Analyze results
 cat results/narrativeqa/metrics_summary.csv
 ```
 
 ---
 
-## 参考资料
+## References
 
-- [LongBench 论文](https://arxiv.org/abs/2308.14508)
+- [LongBench Paper](https://arxiv.org/abs/2308.14508)
 - [LongBench GitHub](https://github.com/THUDM/LongBench)
 - [LongBench HuggingFace](https://huggingface.co/datasets/THUDM/LongBench)
-- [JSONL 格式规范](http://jsonlines.org/)
+- [JSONL Format Specification](http://jsonlines.org/)

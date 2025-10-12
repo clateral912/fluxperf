@@ -1,23 +1,23 @@
-# 测试覆盖率报告
+# Test Coverage Report
 
-## 概述
+## Overview
 
-项目现在包含全面的单元测试套件，覆盖核心功能的主要代码路径。
+The project now includes a comprehensive unit test suite covering major code paths of core functionality.
 
-## 测试统计
+## Test Statistics
 
-| 类别 | 测试文件数 | 测试函数数 | 估计覆盖率 |
-|------|-----------|-----------|-----------|
+| Category | Test Files | Test Functions | Estimated Coverage |
+|----------|-----------|----------------|-------------------|
 | Dataclasses | 1 | 8 | 100% |
 | Utils | 1 | 6 | 90%+ |
 | BenchmarkRunner | 1 | 8 | 85%+ |
 | LLMClient | 1 | 4 | 75%+ |
-| 环境变量 | 1 | 2 | 100% |
-| **总计** | **5** | **28** | **~85%** |
+| Environment Variables | 1 | 2 | 100% |
+| **Total** | **5** | **28** | **~85%** |
 
-## 已测试的模块
+## Tested Modules
 
-### ✅ 完全测试 (90%+)
+### ✅ Fully Tested (90%+)
 
 1. **Dataclasses** (`test_dataclasses.py`)
    - SLOConstraints
@@ -29,7 +29,7 @@
    - Recipe
    - BenchmarkMode
 
-2. **工具函数** (`test_utils.py`)
+2. **Utility Functions** (`test_utils.py`)
    - count_tokens()
    - MetricsAnalyzer.calculate_percentile()
    - MetricsAnalyzer._truncate_text()
@@ -37,12 +37,12 @@
    - SLOLoader.validate_slo()
    - RecipeLoader.load_recipe()
 
-3. **环境变量管理** (`test_env_variables.py`)
-   - 环境变量设置/恢复
-   - 嵌套环境变量
-   - Stage 隔离
+3. **Environment Variable Management** (`test_env_variables.py`)
+   - Environment variable set/restore
+   - Nested environment variables
+   - Stage isolation
 
-### ✅ 充分测试 (75-90%)
+### ✅ Well Tested (75-90%)
 
 4. **BenchmarkRunner** (`test_benchmark_runner.py`)
    - _sanitize_user_message()
@@ -52,131 +52,131 @@
    - _entries_to_single_turn_sessions()
    - _normalize_sessions()
    - _build_conversation_history()
-   - 对话历史截断
+   - Conversation history truncation
 
 5. **LLMClient** (`test_llm_client.py`)
-   - 客户端初始化
-   - 生命周期管理
-   - Payload 构建
-   - Metrics 初始化
+   - Client initialization
+   - Lifecycle management
+   - Payload construction
+   - Metrics initialization
 
-## 未完全覆盖的部分
+## Not Fully Covered
 
-### 需要网络/异步的功能
+### Network/Async Features
 
-这些功能难以在单元测试中覆盖，建议使用集成测试：
+These features are difficult to cover in unit tests, integration tests recommended:
 
-1. **实际网络请求**
-   - LLMClient.send_completion_request() 的完整流程
-   - Prometheus 数据收集
-   - Mock server 的实际响应处理
+1. **Actual Network Requests**
+   - Complete flow of LLMClient.send_completion_request()
+   - Prometheus data collection
+   - Mock server actual response handling
 
-2. **异步并发逻辑**
-   - BenchmarkRunner.run_round() 的完整执行
-   - 多并发层级的实际运行
-   - KV Cache 重置
+2. **Async Concurrency Logic**
+   - Complete execution of BenchmarkRunner.run_round()
+   - Actual running of multiple concurrency levels
+   - KV Cache reset
 
-3. **文件 I/O**
-   - DatasetLoader.load_dataset() 的实际文件读取
-   - MetricsAnalyzer.save_results() 的文件写入
-   - Debug 日志写入
+3. **File I/O**
+   - Actual file reading in DatasetLoader.load_dataset()
+   - File writing in MetricsAnalyzer.save_results()
+   - Debug log writing
 
-### 错误处理路径
+### Error Handling Paths
 
-部分错误处理分支未完全测试：
+Some error handling branches not fully tested:
 
-1. 网络超时和连接错误
-2. JSON 解析错误 (流式响应)
-3. 文件权限错误
-4. 无效的 Recipe 配置
+1. Network timeout and connection errors
+2. JSON parsing errors (streaming response)
+3. File permission errors
+4. Invalid Recipe configuration
 
-## 测试覆盖详情
+## Test Coverage Details
 
 ### test_dataclasses.py
 
 ```
-✓ SLOConstraints - 空值和带值创建
-✓ BenchmarkConfig - 默认值和自定义值
-✓ RequestMetrics - 所有字段初始化
-✓ RoundMetrics - 完整统计信息
-✓ SessionData - 会话数据管理
-✓ RecipeStage - Stage 配置
-✓ Recipe - 完整 Recipe 结构
-✓ BenchmarkMode - 枚举验证
+✓ SLOConstraints - Empty and valued creation
+✓ BenchmarkConfig - Default and custom values
+✓ RequestMetrics - All field initialization
+✓ RoundMetrics - Complete statistics
+✓ SessionData - Session data management
+✓ RecipeStage - Stage configuration
+✓ Recipe - Complete Recipe structure
+✓ BenchmarkMode - Enum validation
 ```
 
 ### test_utils.py
 
 ```
-✓ count_tokens() - 5 种场景
-  - 正常文本
-  - 空文本和 None
-  - 多空格
-  - 特殊字符
+✓ count_tokens() - 5 scenarios
+  - Normal text
+  - Empty text and None
+  - Multiple spaces
+  - Special characters
 
-✓ calculate_percentile() - 4 种场景
+✓ calculate_percentile() - 4 scenarios
   - P50, P90, P99
-  - 空列表、单值
+  - Empty list, single value
 
-✓ _truncate_text() - 3 种场景
-  - 短文本、长文本、边界
+✓ _truncate_text() - 3 scenarios
+  - Short text, long text, boundary
 
-✓ sample_entries() - 4 种场景
-  - 正常、超出、零、空
+✓ sample_entries() - 4 scenarios
+  - Normal, exceeded, zero, empty
 
-✓ validate_slo() - 6 种场景
-  - 符合 SLO
-  - TTFT/ITL/Latency/Throughput 超标
-  - 错误请求
+✓ validate_slo() - 6 scenarios
+  - Meets SLO
+  - TTFT/ITL/Latency/Throughput exceeded
+  - Error requests
 
-✓ load_recipe() - 2 种场景
-  - 有效和无效 recipe
+✓ load_recipe() - 2 scenarios
+  - Valid and invalid recipe
 ```
 
 ### test_benchmark_runner.py
 
 ```
-✓ _sanitize_user_message() - 6 种场景
-✓ _extract_text() - 7 种场景
-✓ _total_turns() - 3 种场景
-✓ _reset_conversation_state() - 验证清空逻辑
-✓ _entries_to_single_turn_sessions() - 4 种场景
-✓ _normalize_sessions() - ShareGPT 格式和去重
-✓ _build_conversation_history() - 3 个 turn 测试
-✓ 对话历史截断 - max_context_tokens 限制
+✓ _sanitize_user_message() - 6 scenarios
+✓ _extract_text() - 7 scenarios
+✓ _total_turns() - 3 scenarios
+✓ _reset_conversation_state() - Verify clearing logic
+✓ _entries_to_single_turn_sessions() - 4 scenarios
+✓ _normalize_sessions() - ShareGPT format and deduplication
+✓ _build_conversation_history() - 3 turn test
+✓ Conversation history truncation - max_context_tokens limit
 ```
 
 ### test_llm_client.py
 
 ```
-✓ 客户端初始化 - 配置和状态
-✓ 生命周期管理 - initialize/cleanup
-✓ Payload 构建 - 配置参数
-✓ Metrics 初始化 - 字段验证
+✓ Client initialization - Configuration and state
+✓ Lifecycle management - initialize/cleanup
+✓ Payload construction - Configuration parameters
+✓ Metrics initialization - Field validation
 ```
 
 ### test_env_variables.py
 
 ```
-✓ 环境变量设置和恢复 - 完整流程
-  - 3 个 stage 测试
-  - 新变量和修改变量
-  - 变量删除
+✓ Environment variable set and restore - Complete flow
+  - 3 stage test
+  - New variables and modified variables
+  - Variable deletion
 
-✓ 嵌套环境变量 - 多层嵌套
-  - 2 层嵌套测试
-  - 正确恢复顺序
+✓ Nested environment variables - Multi-level nesting
+  - 2 level nesting test
+  - Correct restore order
 ```
 
-## 如何运行测试
+## How to Run Tests
 
-### 运行所有测试
+### Run All Tests
 
 ```bash
-# 快速运行
+# Quick run
 bash tests/run_all_tests.sh
 
-# 或逐个运行
+# Or run individually
 python tests/test_dataclasses.py
 python tests/test_utils.py
 python tests/test_benchmark_runner.py
@@ -184,106 +184,106 @@ python tests/test_llm_client.py
 python tests/test_env_variables.py
 ```
 
-### 生成覆盖率报告
+### Generate Coverage Report
 
 ```bash
-# 安装 coverage
+# Install coverage
 pip install coverage
 
-# 运行覆盖率分析
+# Run coverage analysis
 bash tests/coverage_report.sh
 
-# 查看 HTML 报告
+# View HTML report
 open htmlcov/index.html
 ```
 
-## 改进建议
+## Improvement Suggestions
 
-### 短期 (1-2 周)
+### Short Term (1-2 weeks)
 
-1. ✅ 添加 Dataclass 测试 - 完成
-2. ✅ 添加工具函数测试 - 完成
-3. ✅ 添加 BenchmarkRunner 测试 - 完成
-4. ✅ 添加环境变量测试 - 完成
-5. ⏳ 添加更多边界情况测试
+1. ✅ Add Dataclass tests - Complete
+2. ✅ Add utility function tests - Complete
+3. ✅ Add BenchmarkRunner tests - Complete
+4. ✅ Add environment variable tests - Complete
+5. ⏳ Add more edge case tests
 
-### 中期 (1-2 月)
+### Medium Term (1-2 months)
 
-1. 添加集成测试
-   - Mock server 完整流程测试
-   - 端到端 benchmark 测试
-   - 多并发层级测试
+1. Add integration tests
+   - Mock server complete flow test
+   - End-to-end benchmark test
+   - Multi-concurrency level test
 
-2. 添加性能测试
-   - 大数据集处理
-   - 高并发场景
-   - 内存使用监控
+2. Add performance tests
+   - Large dataset processing
+   - High concurrency scenarios
+   - Memory usage monitoring
 
-3. 添加错误注入测试
-   - 网络故障模拟
-   - 文件系统错误
-   - 无效数据处理
+3. Add fault injection tests
+   - Network failure simulation
+   - File system errors
+   - Invalid data handling
 
-### 长期 (3+ 月)
+### Long Term (3+ months)
 
-1. 自动化测试
-   - CI/CD 集成
-   - 每次提交自动测试
-   - 覆盖率报告自动生成
+1. Test automation
+   - CI/CD integration
+   - Automatic test on each commit
+   - Auto-generate coverage reports
 
-2. 压力测试
-   - 长时间运行测试
-   - 资源泄漏检测
-   - 稳定性验证
+2. Stress testing
+   - Long-running tests
+   - Resource leak detection
+   - Stability verification
 
-3. 文档完善
-   - 测试用例文档
-   - 最佳实践指南
-   - 故障排查手册
+3. Documentation improvement
+   - Test case documentation
+   - Best practices guide
+   - Troubleshooting manual
 
-## 测试维护
+## Test Maintenance
 
-### 添加新功能时
+### When Adding New Features
 
-1. **同时编写测试**
-   - 功能代码和测试代码一起提交
-   - 确保测试覆盖新功能的主要路径
+1. **Write tests simultaneously**
+   - Submit feature code and test code together
+   - Ensure tests cover main paths of new features
 
-2. **运行完整测试套件**
+2. **Run complete test suite**
    ```bash
    bash tests/run_all_tests.sh
    ```
 
-3. **检查覆盖率**
+3. **Check coverage**
    ```bash
    bash tests/coverage_report.sh
    ```
 
-4. **确保覆盖率不下降**
-   - 新功能应有 80%+ 覆盖率
-   - 核心功能应有 90%+ 覆盖率
+4. **Ensure coverage doesn't decrease**
+   - New features should have 80%+ coverage
+   - Core features should have 90%+ coverage
 
-### 修复 Bug 时
+### When Fixing Bugs
 
-1. **先写失败的测试**
-   - 重现 bug 的测试用例
+1. **Write failing test first**
+   - Test case reproducing the bug
 
-2. **修复代码**
-   - 使测试通过
+2. **Fix code**
+   - Make test pass
 
-3. **添加回归测试**
-   - 防止 bug 再次出现
+3. **Add regression test**
+   - Prevent bug from reoccurring
 
-## 结论
+## Conclusion
 
-当前测试套件提供了良好的代码覆盖率（估计 ~85%），覆盖了：
+The current test suite provides good code coverage (estimated ~85%), covering:
 
-- ✅ 所有 Dataclass 定义
-- ✅ 主要工具函数
-- ✅ BenchmarkRunner 核心逻辑
-- ✅ 环境变量管理
-- ✅ LLMClient 基础功能
+- ✅ All Dataclass definitions
+- ✅ Main utility functions
+- ✅ BenchmarkRunner core logic
+- ✅ Environment variable management
+- ✅ LLMClient basic functionality
 
-这为代码质量提供了坚实的保障，确保核心功能的正确性和稳定性。
+This provides a solid guarantee for code quality, ensuring correctness and stability of core functions.
 
-**下一步**: 继续添加集成测试和边界情况测试，目标是达到 90%+ 的代码覆盖率。
+**Next step**: Continue adding integration tests and edge case tests, aiming for 90%+ code coverage.

@@ -1,54 +1,54 @@
-# 快速开始指南
+# Quick Start Guide
 
-## 安装
+## Installation
 
 ```bash
-# 克隆仓库
+# Clone repository
 git clone <repository-url>
-cd dual_round_benchmark
+cd fluxperf
 
-# 安装依赖
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-## 基础使用
+## Basic Usage
 
-### 1. 使用 Mock 服务器测试
+### 1. Testing with Mock Server
 
-最简单的方式,无需真实 LLM 服务:
+The simplest way, no real LLM service required:
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --mock-server \
   --dataset examples/example_dataset.json \
   --num-samples 10 \
   --concurrency 5
 ```
 
-### 2. 连接真实 API
+### 2. Connecting to Real API
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset datasets/MixedBench.jsonl \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 50 \
   --concurrency 10
 ```
 
-### 3. 多并发测试
+### 3. Multi-Concurrency Testing
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset datasets/MixedBench.jsonl \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 20 40 80 \
   --concurrency 5 10 20
 ```
 
-### 4. 启用 Prometheus 监控
+### 4. Enabling Prometheus Monitoring
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset datasets/MixedBench.jsonl \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 50 \
@@ -57,9 +57,9 @@ python dual_round_benchmarker.py \
   --prometheus-metrics lmcache_hit_rate vllm_gpu_cache_usage_perc
 ```
 
-### 5. 使用 SLO 约束
+### 5. Using SLO Constraints
 
-创建 `slo.yaml`:
+Create `slo.yaml`:
 
 ```yaml
 constraints:
@@ -71,10 +71,10 @@ constraints:
     max: 10000
 ```
 
-运行测试:
+Run test:
 
 ```bash
-python dual_round_benchmarker.py \
+python fluxperf.py \
   --dataset datasets/MixedBench.jsonl \
   --endpoint http://localhost:8000/v1/chat/completions \
   --num-samples 50 \
@@ -82,9 +82,9 @@ python dual_round_benchmarker.py \
   --slo-file slo.yaml
 ```
 
-### 6. 使用 Recipe 配置
+### 6. Using Recipe Configuration
 
-创建 `my_recipe.yaml`:
+Create `my_recipe.yaml`:
 
 ```yaml
 global:
@@ -94,24 +94,24 @@ global:
   max_output_tokens: 256
 
 stages:
-  - name: "低并发测试"
+  - name: "Low Concurrency Test"
     concurrency_levels: [5]
     num_samples: [20]
   
-  - name: "高并发测试"
+  - name: "High Concurrency Test"
     concurrency_levels: [10, 20]
     num_samples: [40, 80]
 ```
 
-运行:
+Run:
 
 ```bash
-python dual_round_benchmarker.py --recipe my_recipe.yaml
+python fluxperf.py --recipe my_recipe.yaml
 ```
 
-## 数据集准备
+## Dataset Preparation
 
-### 转换 LongBench 数据
+### Converting LongBench Data
 
 ```bash
 python convert_longbench.py \
@@ -120,7 +120,7 @@ python convert_longbench.py \
   --output datasets/narrativeqa.jsonl
 ```
 
-### 处理 ShareGPT 数据
+### Processing ShareGPT Data
 
 ```bash
 python process_sharegpt.py \
@@ -129,29 +129,29 @@ python process_sharegpt.py \
   --max-turns 3
 ```
 
-## 常用参数
+## Common Parameters
 
-| 参数 | 说明 | 默认值 |
+| Parameter | Description | Default |
 |------|------|--------|
-| `--dataset` | 数据集文件路径 | 必需 |
-| `--endpoint` | API endpoint URL | 必需(或 `--mock-server`) |
-| `--num-samples` | 每个并发层级的样本数 | 必需 |
-| `--concurrency` | 并发数列表 | `[10]` |
-| `--mode` | 测试模式: `dual_round` 或 `multi_turn` | `multi_turn` |
-| `--max-output-tokens` | 最大输出 token 数 | 无限制 |
-| `--prometheus-url` | Prometheus metrics 端点 | 无 |
-| `--slo-file` | SLO 配置文件 | 无 |
-| `--output-dir` | 结果输出目录 | `benchmark_results` |
+| `--dataset` | Dataset file path | Required |
+| `--endpoint` | API endpoint URL | Required (or `--mock-server`) |
+| `--num-samples` | Sample count per concurrency level | Required |
+| `--concurrency` | Concurrency list | `[10]` |
+| `--mode` | Test mode: `dual_round` or `multi_turn` | `multi_turn` |
+| `--max-output-tokens` | Maximum output token count | Unlimited |
+| `--prometheus-url` | Prometheus metrics endpoint | None |
+| `--slo-file` | SLO configuration file | None |
+| `--output-dir` | Results output directory | `benchmark_results` |
 
-## 输出说明
+## Output Description
 
-### 终端输出
+### Terminal Output
 
-实时显示进度条和格式化表格:
+Real-time progress bars and formatted tables:
 
 ```
-第1轮 (并发:10): 100%|████████| 50/50 [00:25<00:00]
-✓ 完成,耗时: 25.43 秒
+Round 1 (Concurrency:10): 100%|████████| 50/50 [00:25<00:00]
+✓ Complete, Duration: 25.43 seconds
 
 ┏━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┓
 ┃ Statistic         ┃ avg    ┃ p99    ┃ p50    ┃
@@ -162,14 +162,14 @@ python process_sharegpt.py \
 └───────────────────┴────────┴────────┴────────┘
 ```
 
-### 文件输出
+### File Output
 
-- `benchmark_results/benchmark_YYYYMMDD_HHMMSS.csv`: CSV 格式汇总
-- `benchmark_results/benchmark_YYYYMMDD_HHMMSS_params.txt`: 测试参数
-- `benchmark_results.json`: JSON 格式详细数据(如果指定 `--output`)
+- `benchmark_results/benchmark_YYYYMMDD_HHMMSS.csv`: CSV format summary
+- `benchmark_results/benchmark_YYYYMMDD_HHMMSS_params.txt`: Test parameters
+- `benchmark_results.json`: JSON format detailed data (if `--output` specified)
 
-## 下一步
+## Next Steps
 
-- 详细使用说明: [benchmarker_guide.md](benchmarker_guide.md)
-- Recipe 配置: [RECIPE_GUIDE.md](RECIPE_GUIDE.md)
-- 架构文档: [ARCHITECTURE.md](ARCHITECTURE.md)
+- Detailed usage instructions: [benchmarker_guide.md](benchmarker_guide.md)
+- Recipe configuration: [RECIPE_GUIDE.md](RECIPE_GUIDE.md)
+- Architecture documentation: [ARCHITECTURE.md](ARCHITECTURE.md)

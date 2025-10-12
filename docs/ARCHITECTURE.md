@@ -1,108 +1,108 @@
-# Dual Round Benchmarker 架构文档
+# FluxPerf Architecture Documentation
 
-## 项目概述
+## Project Overview
 
-Dual Round Benchmarker 是一个用于测试 LLM API 服务性能的工具,特别适合评估缓存性能(如 KV 缓存、前缀缓存)。通过两轮相同请求的性能对比,可以量化缓存的加速效果。
+FluxPerf is a tool designed for testing LLM API service performance, particularly suitable for evaluating cache performance (such as KV cache, prefix cache). By comparing performance metrics across two rounds of identical requests, it can quantify cache acceleration effects.
 
-## 核心组件
+## Core Components
 
-### 1. dual_round_benchmarker.py
+### 1. fluxperf.py
 
-主压测工具,提供以下核心功能:
+Main stress testing tool providing the following core functionality:
 
-#### 核心类
+#### Core Classes
 
-- **BenchmarkConfig**: 配置数据类,包含所有测试参数
-- **BenchmarkRunner**: 测试执行器,负责组织和执行测试流程
-- **OpenAIClient**: HTTP 客户端,负责与 API endpoint 通信
-- **MetricsAnalyzer**: 指标分析器,计算和展示性能指标
-- **PrometheusCollector**: Prometheus 指标收集器
-- **ConversationHistory**: 多轮对话历史管理
+- **BenchmarkConfig**: Configuration data class containing all test parameters
+- **BenchmarkRunner**: Test executor responsible for organizing and executing test flow
+- **OpenAIClient**: HTTP client responsible for communicating with API endpoint
+- **MetricsAnalyzer**: Metrics analyzer for calculating and displaying performance metrics
+- **PrometheusCollector**: Prometheus metrics collector
+- **ConversationHistory**: Multi-turn conversation history manager
 
-#### 测试模式
+#### Test Modes
 
-1. **DUAL_ROUND 模式**: 两轮单次请求,每个数据集条目作为独立会话
-2. **MULTI_TURN 模式**: 多轮对话模式,保持会话上下文
+1. **DUAL_ROUND Mode**: Two rounds of single requests, each dataset entry as independent session
+2. **MULTI_TURN Mode**: Multi-turn conversation mode, maintaining session context
 
-#### 关键流程
+#### Key Flow
 
 ```
-加载配置 → 加载数据集 → 采样 → 第1轮测试 → 第2轮测试 → 分析指标 → 输出结果
+Load config → Load dataset → Sample → Round 1 test → Round 2 test → Analyze metrics → Output results
                                    ↓                ↓
-                           收集 Prometheus      收集 Prometheus
+                           Collect Prometheus    Collect Prometheus
 ```
 
 ### 2. llm_mocker.py
 
-Mock LLM 服务器,用于测试和开发:
+Mock LLM server for testing and development:
 
-- 实现 OpenAI Chat Completions API 兼容接口
-- 支持流式输出(SSE)
-- 可配置响应延迟和内容
-- 用于环境变量测试和集成测试
+- Implements OpenAI Chat Completions API compatible interface
+- Supports streaming output (SSE)
+- Configurable response delay and content
+- Used for environment variable testing and integration testing
 
 ### 3. convert_longbench.py
 
-LongBench 数据集转换工具:
+LongBench dataset conversion tool:
 
-- 从 HuggingFace 下载数据集
-- 转换为 benchmarker 兼容的 JSONL 格式
-- 支持批量转换和采样
+- Download datasets from HuggingFace
+- Convert to benchmarker-compatible JSONL format
+- Support batch conversion and sampling
 
 ### 4. process_sharegpt.py
 
-ShareGPT 数据集处理工具:
+ShareGPT dataset processing tool:
 
-- 清洗和标准化 ShareGPT 格式数据
-- 提取多轮对话
-- 生成 JSONL 格式输出
+- Clean and standardize ShareGPT format data
+- Extract multi-turn conversations
+- Generate JSONL format output
 
-## 数据流
+## Data Flow
 
-### 输入
+### Input
 
-1. **数据集**: JSON/JSONL 格式,支持多种结构
-   - 单轮: `{"text": "..."}`
-   - 多轮: `{"user_messages": [...], ...}`
+1. **Dataset**: JSON/JSONL format, supporting various structures
+   - Single-turn: `{"text": "..."}`
+   - Multi-turn: `{"user_messages": [...], ...}`
    - ShareGPT: `{"conversations": [...]}`
 
-2. **配置文件**
-   - Recipe YAML: 多阶段测试配置
-   - SLO YAML: 服务级别目标定义
+2. **Configuration Files**
+   - Recipe YAML: Multi-stage test configuration
+   - SLO YAML: Service Level Objective definitions
 
-### 输出
+### Output
 
-1. **终端输出**: 实时进度和格式化表格
-2. **CSV 文件**: 汇总指标对比表
-3. **JSON 文件**: 详细的请求级别数据
-4. **JSONL 日志**: 请求详情(可选)
-5. **调试日志**: JSON 格式调试信息(可选)
+1. **Terminal Output**: Real-time progress and formatted tables
+2. **CSV Files**: Summary metric comparison tables
+3. **JSON Files**: Detailed request-level data
+4. **JSONL Logs**: Request details (optional)
+5. **Debug Logs**: JSON format debug information (optional)
 
-## 性能指标
+## Performance Metrics
 
-### 基础指标
+### Basic Metrics
 
-- **TTFT (Time to First Token)**: 首 token 延迟(ms)
-- **ITL (Inter-Token Latency)**: token 间延迟(ms)
-- **Latency**: 总延迟(ms)
-- **Throughput**: 吞吐量(tokens/sec, requests/sec)
-- **Goodput**: 满足 SLO 的有效吞吐量
+- **TTFT (Time to First Token)**: First token latency (ms)
+- **ITL (Inter-Token Latency)**: Token interval latency (ms)
+- **Latency**: Total latency (ms)
+- **Throughput**: Throughput (tokens/sec, requests/sec)
+- **Goodput**: Effective throughput meeting SLO
 
-### 统计值
+### Statistics
 
-每个指标计算:
+For each metric, calculate:
 - avg, p50, p90, p95, p99, min, max, stddev
 
-### Prometheus 指标
+### Prometheus Metrics
 
-支持自定义 Prometheus 指标收集,常用指标:
-- `lmcache_hit_rate`: 缓存命中率
-- `vllm_gpu_cache_usage_perc`: GPU 缓存使用率
-- `vllm_num_requests_running`: 运行中的请求数
+Supports custom Prometheus metrics collection, commonly used metrics:
+- `lmcache_hit_rate`: Cache hit rate
+- `vllm_gpu_cache_usage_perc`: GPU cache usage
+- `vllm_num_requests_running`: Running request count
 
-## Recipe 系统
+## Recipe System
 
-Recipe 文件支持多阶段测试配置:
+Recipe files support multi-stage test configurations:
 
 ```yaml
 global:
@@ -118,31 +118,31 @@ stages:
       CUSTOM_VAR: "value"
 ```
 
-### 环境变量注入
+### Environment Variable Injection
 
-每个 stage 可以设置独立的环境变量,用于:
-- 控制服务器行为
-- A/B 测试不同配置
-- 动态调整参数
+Each stage can set independent environment variables, used for:
+- Controlling server behavior
+- A/B testing different configurations
+- Dynamically adjusting parameters
 
-## Prometheus 集成
+## Prometheus Integration
 
-### 数据抓取机制
+### Data Scraping Mechanism
 
-在 `PrometheusCollector` 类(dual_round_benchmarker.py:399-462):
+In the `PrometheusCollector` class (fluxperf.py:399-462):
 
 ```python
 class PrometheusCollector:
     async def collect_during_test(self, session, start_time, end_time, interval=1.0):
         while time.time() < end_time:
             metrics_data = await self.fetch_metrics(session)
-            # 存储带时间戳的指标
+            # Store metrics with timestamp
             await asyncio.sleep(interval)
 ```
 
-### 抓取频率
+### Scraping Frequency
 
-默认每 **0.5 秒** 抓取一次(dual_round_benchmarker.py:899):
+Default scrape every **0.5 seconds** (fluxperf.py:899):
 
 ```python
 prom_task = asyncio.create_task(
@@ -150,68 +150,68 @@ prom_task = asyncio.create_task(
         client.session,
         round_start_time,
         estimated_end_time,
-        interval=0.5  # 500ms 抓取间隔
+        interval=0.5  # 500ms scrape interval
     )
 )
 ```
 
-### 时间范围过滤
+### Time Range Filtering
 
-测试完成后,只保留测试时间范围内的数据点:
+After test completes, only keep data points within test time range:
 
 ```python
 def get_metrics_in_timerange(self, start_time: float, end_time: float):
-    # 过滤 start_time <= timestamp <= end_time 的数据
+    # Filter data where start_time <= timestamp <= end_time
 ```
 
-## 缓存控制
+## Cache Control
 
-### KVCache 重置
+### KVCache Reset
 
-支持在以下时机重置 vLLM KVCache:
+Supports resetting vLLM KVCache at the following times:
 
-1. **轮次间重置**: `--reset-cache-between-rounds`
-2. **并发层级间重置**: `--reset-cache-between-concurrency`
-3. **测试结束**: 自动重置
+1. **Between Rounds Reset**: `--reset-cache-between-rounds`
+2. **Between Concurrency Levels Reset**: `--reset-cache-between-concurrency`
+3. **Test End**: Automatic reset
 
-重置通过 POST 请求到 `--reset-cache-url` 端点实现。
+Reset implemented via POST request to `--reset-cache-url` endpoint.
 
-## 目录结构
+## Directory Structure
 
 ```
-dual_round_benchmark/
-├── dual_round_benchmarker.py    # 主程序
-├── llm_mocker.py                # Mock 服务器
-├── convert_longbench.py         # 数据转换
-├── process_sharegpt.py          # ShareGPT 处理
-├── requirements.txt             # 依赖
-├── README.md                    # 项目说明
-├── examples/                    # 配置示例
+fluxperf/
+├── fluxperf.py                  # Main program
+├── llm_mocker.py                # Mock server
+├── convert_longbench.py         # Data conversion
+├── process_sharegpt.py          # ShareGPT processing
+├── requirements.txt             # Dependencies
+├── README.md                    # Project description
+├── examples/                    # Configuration examples
 │   ├── recipe_*.yaml
 │   └── slo_example.yaml
-├── datasets/                    # 数据集
-├── docs/                        # 文档
-│   ├── ARCHITECTURE.md         # 本文档
-│   ├── benchmarker_guide.md    # 使用指南
-│   ├── RECIPE_GUIDE.md         # Recipe 配置
-│   └── ENV_VAR_TESTING.md      # 环境变量测试
-├── tests/                       # 测试套件
-└── benchmark_results/           # 输出目录(生成)
+├── datasets/                    # Datasets
+├── docs/                        # Documentation
+│   ├── ARCHITECTURE.md         # This document
+│   ├── benchmarker_guide.md    # Usage guide
+│   ├── RECIPE_GUIDE.md         # Recipe configuration
+│   └── ENV_VAR_TESTING.md      # Environment variable testing
+├── tests/                       # Test suite
+└── benchmark_results/           # Output directory (generated)
 ```
 
-## 扩展点
+## Extension Points
 
-### 添加新的数据集格式
+### Adding New Dataset Formats
 
-在 `_extract_user_messages_from_entry()` 方法中添加解析逻辑。
+Add parsing logic in the `_extract_user_messages_from_entry()` method.
 
-### 添加新的性能指标
+### Adding New Performance Metrics
 
-1. 在 `RequestMetrics` 中添加字段
-2. 在 `OpenAIClient.send_completion_request()` 中计算
-3. 在 `MetricsAnalyzer.analyze_round()` 中聚合
-4. 在 `MetricsAnalyzer.print_metrics()` 中展示
+1. Add fields in `RequestMetrics`
+2. Calculate in `OpenAIClient.send_completion_request()`
+3. Aggregate in `MetricsAnalyzer.analyze_round()`
+4. Display in `MetricsAnalyzer.print_metrics()`
 
-### 集成新的监控系统
+### Integrating New Monitoring Systems
 
-参考 `PrometheusCollector` 实现新的 Collector 类。
+Implement new Collector class referencing `PrometheusCollector`.
