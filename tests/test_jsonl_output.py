@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-测试 convert_longbench.py 的 JSONL 输出格式
+Test JSONL output format from convert_longbench.py
 
-验证输出文件是否符合 JSONL 标准：
-- 每行一个独立的 JSON 对象
-- 行之间没有逗号
-- 没有包裹的方括号
+Verifies output file conforms to JSONL standard:
+- One independent JSON object per line
+- No commas between lines
+- No wrapping brackets
 """
 
 import json
@@ -15,18 +15,18 @@ from pathlib import Path
 
 def test_jsonl_format(file_path: Path) -> bool:
     """
-    测试文件是否为有效的 JSONL 格式
+    Test if file is valid JSONL format
 
     Args:
-        file_path: 要测试的文件路径
+        file_path: Path to file to test
 
     Returns:
-        True 如果格式正确，False 否则
+        True if format is correct, False otherwise
     """
-    print(f"测试文件: {file_path}")
+    print(f"Testing file: {file_path}")
 
     if not file_path.exists():
-        print(f"❌ 文件不存在: {file_path}")
+        print(f"❌ File does not exist: {file_path}")
         return False
 
     try:
@@ -34,55 +34,55 @@ def test_jsonl_format(file_path: Path) -> bool:
             lines = f.readlines()
 
         if not lines:
-            print("❌ 文件为空")
+            print("❌ File is empty")
             return False
 
-        # 检查是否以 [ 开头（JSON 数组格式，错误）
+        # Check if starts with [ (JSON array format, wrong)
         first_line = lines[0].strip()
         if first_line.startswith('['):
-            print("❌ 文件以 '[' 开头，这是 JSON 数组格式，不是 JSONL")
+            print("❌ File starts with '[', this is JSON array format, not JSONL")
             return False
 
-        # 检查每一行
+        # Check each line
         valid_lines = 0
         for i, line in enumerate(lines, 1):
             line = line.strip()
             if not line:
                 continue
 
-            # 检查是否有逗号结尾（JSON 数组元素，错误）
+            # Check if ends with comma (JSON array element, wrong)
             if line.endswith(','):
-                print(f"❌ 第 {i} 行以逗号结尾，这是 JSON 数组格式，不是 JSONL")
+                print(f"❌ Line {i} ends with comma, this is JSON array format, not JSONL")
                 return False
 
-            # 尝试解析为 JSON 对象
+            # Try to parse as JSON object
             try:
                 obj = json.loads(line)
                 if not isinstance(obj, dict):
-                    print(f"❌ 第 {i} 行不是 JSON 对象: {type(obj)}")
+                    print(f"❌ Line {i} is not a JSON object: {type(obj)}")
                     return False
                 valid_lines += 1
             except json.JSONDecodeError as e:
-                print(f"❌ 第 {i} 行 JSON 解析失败: {e}")
+                print(f"❌ Line {i} JSON parsing failed: {e}")
                 return False
 
-        print(f"✅ JSONL 格式正确!")
-        print(f"   总行数: {len(lines)}")
-        print(f"   有效对象数: {valid_lines}")
+        print(f"✅ JSONL format is correct!")
+        print(f"   Total lines: {len(lines)}")
+        print(f"   Valid objects: {valid_lines}")
 
-        # 显示第一个对象的示例
+        # Display example of first object
         with open(file_path, 'r', encoding='utf-8') as f:
             first_obj = json.loads(f.readline())
-            print(f"\n第一个对象示例:")
-            print(f"  键: {list(first_obj.keys())}")
+            print(f"\nFirst object example:")
+            print(f"  Keys: {list(first_obj.keys())}")
             if 'text' in first_obj:
                 text_preview = first_obj['text'][:100] + "..." if len(first_obj['text']) > 100 else first_obj['text']
-                print(f"  text 预览: {text_preview}")
+                print(f"  text preview: {text_preview}")
 
         return True
 
     except Exception as e:
-        print(f"❌ 测试失败: {e}")
+        print(f"❌ Test failed: {e}")
         return False
 
 
@@ -90,8 +90,8 @@ if __name__ == "__main__":
     if len(sys.argv) > 1:
         file_path = Path(sys.argv[1])
     else:
-        print("用法: python test_jsonl_output.py <jsonl_file>")
-        print("\n示例:")
+        print("Usage: python test_jsonl_output.py <jsonl_file>")
+        print("\nExample:")
         print("  python test_jsonl_output.py datasets/output.jsonl")
         sys.exit(1)
 

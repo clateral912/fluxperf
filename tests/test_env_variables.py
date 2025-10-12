@@ -41,7 +41,7 @@ def test_env_restore():
         'TEST_VAR_3': 'stage1_value_3'
     }
     
-    # 保存原始值
+    # Save original values
     original_env = {}
     for key, value in stage1_env.items():
         original_env[key] = os.environ.get(key)
@@ -89,7 +89,7 @@ def test_env_restore():
         'TEST_VAR_4': 'stage2_value_4'
     }
     
-    # 保存原始值
+    # Save original values
     original_env = {}
     for key, value in stage2_env.items():
         original_env[key] = os.environ.get(key)

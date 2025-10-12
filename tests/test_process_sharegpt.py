@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from process_sharegpt import process_dataset
+from process_sharegpt_data import process_dataset
 
 
 class ShareGPTProcessingTests(unittest.TestCase):

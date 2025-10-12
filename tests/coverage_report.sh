@@ -1,31 +1,31 @@
 #!/bin/bash
 
-# 生成测试覆盖率报告
-# 需要安装: pip install coverage
+# Generate test coverage report
+# Required: pip install coverage
 
 echo "=========================================="
-echo "生成测试覆盖率报告"
-echo "=========================================="
+echo "Generating Test Coverage Report"
+echo "========================================="
 echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
-# 检查是否安装了 coverage
+# Check if coverage is installed
 if ! python -m coverage --version &> /dev/null; then
-    echo "❌ 未安装 coverage 模块"
-    echo "请运行: pip install coverage"
+    echo "❌ coverage module not installed"
+    echo "Please run: pip install coverage"
     exit 1
 fi
 
-echo "清理旧的覆盖率数据..."
+echo "Cleaning old coverage data..."
 python -m coverage erase
 
 echo ""
-echo "运行测试并收集覆盖率数据..."
+echo "Running tests and collecting coverage data..."
 echo ""
 
-# 运行每个测试文件
+# Run each test file
 python -m coverage run --source=. --omit="tests/*,lib/*" tests/test_dataclasses.py
 python -m coverage run -a --source=. --omit="tests/*,lib/*" tests/test_utils.py
 python -m coverage run -a --source=. --omit="tests/*,lib/*" tests/test_benchmark_runner.py
@@ -34,23 +34,23 @@ python -m coverage run -a --source=. --omit="tests/*,lib/*" tests/test_env_varia
 
 echo ""
 echo "=========================================="
-echo "覆盖率报告"
+echo "Coverage Report"
 echo "=========================================="
 echo ""
 
-# 生成终端报告
+# Generate terminal report
 python -m coverage report -m
 
 echo ""
 echo "=========================================="
-echo "详细 HTML 报告"
-echo "=========================================="
+echo "Detailed HTML Report"
+echo "========================================="
 
-# 生成 HTML 报告
+# Generate HTML report
 python -m coverage html
 
 echo ""
-echo "HTML 报告已生成: htmlcov/index.html"
-echo "在浏览器中打开查看详细覆盖率"
+echo "HTML report generated: htmlcov/index.html"
+echo "Open in browser to view detailed coverage"
 echo ""
 echo "=========================================="

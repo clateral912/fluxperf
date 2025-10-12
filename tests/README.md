@@ -1,39 +1,39 @@
-# 测试套件
+# Test Suite
 
-完整的单元测试套件，覆盖项目的核心功能。
+Complete unit test suite covering the core functionality of the project.
 
-## 测试文件
+## Test Files
 
-### 核心测试
+### Core Tests
 
-| 文件 | 覆盖内容 | 测试数量 |
-|------|----------|----------|
-| `test_dataclasses.py` | 所有 dataclass 的创建和验证 | 8 |
-| `test_utils.py` | 工具函数和辅助方法 | 6 |
-| `test_benchmark_runner.py` | BenchmarkRunner 核心逻辑 | 8 |
-| `test_llm_client.py` | LLMClient 和请求处理 | 4 |
-| `test_env_variables.py` | 环境变量管理 | 2 |
+| File | Coverage | Test Count |
+|------|----------|------------|
+| `test_dataclasses.py` | All dataclass creation and validation | 8 |
+| `test_utils.py` | Utility functions and helper methods | 6 |
+| `test_benchmark_runner.py` | BenchmarkRunner core logic | 8 |
+| `test_llm_client.py` | LLMClient and request handling | 4 |
+| `test_env_variables.py` | Environment variable management | 2 |
 
-### 集成测试
+### Integration Tests
 
-| 文件 | 覆盖内容 |
+| File | Coverage |
 |------|----------|
-| `test_llm_mocker.py` | Mock LLM 服务器功能 |
-| `test_process_sharegpt.py` | ShareGPT 数据处理 |
-| `test_conversation_history.py` | 对话历史管理 |
-| `test_prometheus.py` | Prometheus 集成 |
-| `test_jsonl_output.py` | JSONL 输出格式 |
-| `test_recipe_env_integration.sh` | Recipe 环境变量集成测试 |
+| `test_llm_mocker.py` | Mock LLM server functionality |
+| `test_process_sharegpt.py` | ShareGPT data processing |
+| `test_conversation_history.py` | Conversation history management |
+| `test_prometheus.py` | Prometheus integration |
+| `test_jsonl_output.py` | JSONL output format |
+| `test_recipe_env_integration.sh` | Recipe environment variable integration test |
 
-## 运行测试
+## Running Tests
 
-### 运行所有测试
+### Run All Tests
 
 ```bash
-# 简单模式
+# Simple mode
 bash tests/run_all_tests.sh
 
-# 或逐个运行
+# Or run individually
 python tests/test_dataclasses.py
 python tests/test_utils.py
 python tests/test_benchmark_runner.py
@@ -41,197 +41,197 @@ python tests/test_llm_client.py
 python tests/test_env_variables.py
 ```
 
-### 生成覆盖率报告
+### Generate Coverage Report
 
 ```bash
-# 需要先安装 coverage
+# Install coverage first
 pip install coverage
 
-# 运行覆盖率分析
+# Run coverage analysis
 bash tests/coverage_report.sh
 
-# 查看 HTML 报告
+# View HTML report
 open htmlcov/index.html  # macOS
 xdg-open htmlcov/index.html  # Linux
 ```
 
-## 测试覆盖范围
+## Test Coverage Scope
 
 ### test_dataclasses.py
 
-测试所有数据类的创建、默认值和字段验证：
+Tests creation, default values, and field validation for all data classes:
 
-- ✓ `SLOConstraints` - 空值和带值创建
-- ✓ `BenchmarkConfig` - 所有配置参数
-- ✓ `RequestMetrics` - 请求指标记录
-- ✓ `RoundMetrics` - 轮次统计信息
-- ✓ `SessionData` - 会话数据管理
-- ✓ `RecipeStage` - Recipe 阶段配置
-- ✓ `Recipe` - Recipe 完整结构
-- ✓ `BenchmarkMode` - 枚举类型
+- ✓ `SLOConstraints` - empty and value creation
+- ✓ `BenchmarkConfig` - all configuration parameters
+- ✓ `RequestMetrics` - request metrics recording
+- ✓ `RoundMetrics` - round statistics
+- ✓ `SessionData` - session data management
+- ✓ `RecipeStage` - Recipe stage configuration
+- ✓ `Recipe` - complete Recipe structure
+- ✓ `BenchmarkMode` - enum type
 
-**覆盖**: 100% dataclass 定义
+**Coverage**: 100% dataclass definitions
 
 ### test_utils.py
 
-测试工具函数和辅助方法：
+Tests utility functions and helper methods:
 
-- ✓ `count_tokens()` - Token 计数逻辑
-  - 正常文本
-  - 空文本和 None
-  - 多空格处理
-  - 特殊字符
+- ✓ `count_tokens()` - token counting logic
+  - Normal text
+  - Empty text and None
+  - Multiple spaces handling
+  - Special characters
 
-- ✓ `MetricsAnalyzer.calculate_percentile()` - 百分位数计算
+- ✓ `MetricsAnalyzer.calculate_percentile()` - percentile calculation
   - P50, P90, P99
-  - 空列表和单值
+  - Empty list and single value
 
-- ✓ `MetricsAnalyzer._truncate_text()` - 文本截断
-  - 短文本、长文本
-  - 边界情况
+- ✓ `MetricsAnalyzer._truncate_text()` - text truncation
+  - Short text, long text
+  - Boundary cases
 
-- ✓ `DatasetLoader.sample_entries()` - 数据集采样
-  - 正常采样
-  - 超出数据集大小
-  - 空数据集
+- ✓ `DatasetLoader.sample_entries()` - dataset sampling
+  - Normal sampling
+  - Exceeding dataset size
+  - Empty dataset
 
-- ✓ `SLOLoader.validate_slo()` - SLO 验证
-  - TTFT 超标
-  - ITL 超标
-  - Latency 超标
-  - Throughput 不足
-  - 错误请求
+- ✓ `SLOLoader.validate_slo()` - SLO validation
+  - TTFT exceeds limit
+  - ITL exceeds limit
+  - Latency exceeds limit
+  - Throughput insufficient
+  - Error requests
 
-- ✓ `RecipeLoader.load_recipe()` - Recipe 加载
-  - 有效 recipe
-  - 无效模式
+- ✓ `RecipeLoader.load_recipe()` - Recipe loading
+  - Valid recipe
+  - Invalid mode
 
-**覆盖**: 主要工具函数 90%+
+**Coverage**: 90%+ main utility functions
 
 ### test_benchmark_runner.py
 
-测试 BenchmarkRunner 的核心逻辑：
+Tests BenchmarkRunner core logic:
 
-- ✓ `_sanitize_user_message()` - 消息清理
-  - 正常文本、空文本
-  - 字典格式
-  - 去除空格
+- ✓ `_sanitize_user_message()` - message sanitization
+  - Normal text, empty text
+  - Dictionary format
+  - Strip spaces
 
-- ✓ `_extract_text()` - 文本提取
-  - 字符串、字典多种格式
-  - text, prompt, content, messages 字段
-  - 类型转换
+- ✓ `_extract_text()` - text extraction
+  - String, dictionary multiple formats
+  - text, prompt, content, messages fields
+  - Type conversion
 
-- ✓ `_total_turns()` - 轮次计算
-  - 多个 session
-  - 空列表、单 session
+- ✓ `_total_turns()` - turn calculation
+  - Multiple sessions
+  - Empty list, single session
 
-- ✓ `_reset_conversation_state()` - 状态重置
-  - 清空历史
-  - 保留用户消息
+- ✓ `_reset_conversation_state()` - state reset
+  - Clear history
+  - Retain user messages
 
-- ✓ `_entries_to_single_turn_sessions()` - Dual-round 模式转换
-  - 不同格式的 entry
-  - ID 处理
-  - 空条目过滤
+- ✓ `_entries_to_single_turn_sessions()` - Dual-round mode conversion
+  - Different entry formats
+  - ID handling
+  - Empty entry filtering
 
-- ✓ `_normalize_sessions()` - Multi-turn 模式转换
-  - ShareGPT 格式
-  - ID 去重处理
+- ✓ `_normalize_sessions()` - Multi-turn mode conversion
+  - ShareGPT format
+  - ID deduplication
 
-- ✓ `_build_conversation_history()` - 对话历史构建
-  - 不同 turn 的历史
-  - 正确的消息顺序
+- ✓ `_build_conversation_history()` - conversation history building
+  - History at different turns
+  - Correct message order
 
-- ✓ 对话历史截断
-  - max_context_tokens 限制
-  - 保留最近消息
+- ✓ Conversation history truncation
+  - max_context_tokens limit
+  - Retain recent messages
 
-**覆盖**: BenchmarkRunner 主要方法 85%+
+**Coverage**: 85%+ BenchmarkRunner main methods
 
 ### test_llm_client.py
 
-测试 LLMClient 的功能：
+Tests LLMClient functionality:
 
-- ✓ 客户端初始化
-  - 配置正确
-  - 初始状态
+- ✓ Client initialization
+  - Correct configuration
+  - Initial state
 
-- ✓ 生命周期管理
+- ✓ Lifecycle management
   - initialize()
   - cleanup()
 
-- ✓ Payload 构建
+- ✓ Payload building
   - model_name
   - max_output_tokens
-  - save_requests 模式
+  - save_requests mode
 
-- ✓ Metrics 初始化
-  - 所有字段正确
-  - 默认值
+- ✓ Metrics initialization
+  - All fields correct
+  - Default values
 
-**覆盖**: LLMClient 核心功能 75%+
+**Coverage**: 75%+ LLMClient core functionality
 
 ### test_env_variables.py
 
-测试环境变量管理：
+Tests environment variable management:
 
-- ✓ 环境变量设置和恢复
-  - 新值设置
-  - 原值恢复
-  - 多 stage 隔离
+- ✓ Environment variable setting and restoration
+  - Set new values
+  - Restore original values
+  - Multiple stage isolation
 
-- ✓ 嵌套环境变量
-  - 多层嵌套
-  - 正确恢复
+- ✓ Nested environment variables
+  - Multiple nesting levels
+  - Correct restoration
 
-**覆盖**: 环境变量管理逻辑 100%
+**Coverage**: 100% environment variable management logic
 
-## 测试最佳实践
+## Testing Best Practices
 
-### 1. 测试命名
+### 1. Test Naming
 
 ```python
 def test_function_name():
-    """简洁描述测试内容"""
-    print("测试 function_name...")
-    # 测试代码
-    print("✓ function_name 测试通过")
+    """Concise description of test"""
+    print("Testing function_name...")
+    # Test code
+    print("✓ function_name tests passed")
 ```
 
-### 2. 断言使用
+### 2. Assertion Usage
 
 ```python
-# 使用清晰的断言
-assert result == expected, f"期望 {expected}, 实际 {result}"
+# Use clear assertions
+assert result == expected, f"Expected {expected}, got {result}"
 
-# 测试异常
+# Test exceptions
 try:
     func_that_should_fail()
-    assert False, "应该抛出异常"
+    assert False, "Should raise exception"
 except ExpectedError:
-    pass  # 测试通过
+    pass  # Test passed
 ```
 
-### 3. 测试隔离
+### 3. Test Isolation
 
-每个测试应该：
-- 独立运行
-- 不依赖其他测试
-- 清理自己的状态
+Each test should:
+- Run independently
+- Not depend on other tests
+- Clean up its own state
 
-### 4. 测试覆盖目标
+### 4. Test Coverage Goals
 
-- **核心功能**: 100% 覆盖
-- **工具函数**: 90%+ 覆盖
-- **边界情况**: 重点测试
-- **错误处理**: 确保测试
+- **Core functionality**: 100% coverage
+- **Utility functions**: 90%+ coverage
+- **Boundary cases**: focus testing
+- **Error handling**: ensure testing
 
-## 添加新测试
+## Adding New Tests
 
-1. **创建测试文件**: `tests/test_new_feature.py`
+1. **Create test file**: `tests/test_new_feature.py`
 
-2. **编写测试**:
+2. **Write test**:
 ```python
 #!/usr/bin/env python3
 import sys
@@ -239,29 +239,29 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from dual_round_benchmarker import YourClass
+from fluxperf import YourClass
 
 def test_your_feature():
-    """测试描述"""
-    print("测试 your_feature...")
-    # 测试代码
+    """Test description"""
+    print("Testing your_feature...")
+    # Test code
     assert condition
-    print("✓ your_feature 测试通过")
+    print("✓ your_feature tests passed")
 
 if __name__ == '__main__':
     try:
         test_your_feature()
-        print("\n所有测试通过! ✓")
+        print("\nAll tests passed! ✓")
     except AssertionError as e:
-        print(f"\n❌ 测试失败: {e}")
+        print(f"\n❌ Test failed: {e}")
         sys.exit(1)
 ```
 
-3. **添加到测试运行器**: 编辑 `run_all_tests.sh`
+3. **Add to test runner**: Edit `run_all_tests.sh`
 
-4. **运行测试**: `bash tests/run_all_tests.sh`
+4. **Run tests**: `bash tests/run_all_tests.sh`
 
-## CI/CD 集成
+## CI/CD Integration
 
 ### GitHub Actions
 
@@ -289,33 +289,33 @@ jobs:
         run: bash tests/coverage_report.sh
 ```
 
-## 故障排查
+## Troubleshooting
 
-### 测试失败
+### Test Failures
 
-1. 查看错误消息和堆栈跟踪
-2. 检查是否有依赖缺失
-3. 确认测试环境正确
+1. Review error messages and stack trace
+2. Check for missing dependencies
+3. Confirm test environment is correct
 
-### 导入错误
+### Import Errors
 
 ```bash
-# 确保在项目根目录运行
+# Ensure running from project root
 cd /path/to/dual_round_benchmark
 python tests/test_xxx.py
 ```
 
-### 覆盖率低
+### Low Coverage
 
-1. 运行覆盖率报告查看未覆盖代码
-2. 为关键路径添加测试
-3. 测试错误处理分支
+1. Run coverage report to see uncovered code
+2. Add tests for critical paths
+3. Test error handling branches
 
-## 贡献指南
+## Contribution Guidelines
 
-提交新功能时请：
+When submitting new features, please:
 
-1. ✓ 编写相应的单元测试
-2. ✓ 确保所有测试通过
-3. ✓ 保持测试覆盖率 > 80%
-4. ✓ 更新测试文档
+1. ✓ Write corresponding unit tests
+2. ✓ Ensure all tests pass
+3. ✓ Maintain test coverage > 80%
+4. ✓ Update test documentation

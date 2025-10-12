@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-测试所有 dataclass 的创建和验证
+Test creation and validation of all dataclasses
 """
 
 import sys
@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from dual_round_benchmarker import (
+from fluxperf import (
     SLOConstraints,
     BenchmarkConfig,
     RequestMetrics,
@@ -21,17 +21,17 @@ from dual_round_benchmarker import (
 
 
 def test_slo_constraints():
-    """测试 SLOConstraints dataclass"""
-    print("测试 SLOConstraints...")
+    """Test SLOConstraints dataclass"""
+    print("Testing SLOConstraints...")
     
-    # 创建空的 SLO
+    # Create empty SLO
     slo1 = SLOConstraints()
     assert slo1.ttft_ms is None
     assert slo1.itl_ms is None
     assert slo1.latency_ms is None
     assert slo1.output_token_throughput is None
     
-    # 创建带值的 SLO
+    # Create SLO with values
     slo2 = SLOConstraints(
         ttft_ms=100.0,
         itl_ms=50.0,
@@ -43,12 +43,12 @@ def test_slo_constraints():
     assert slo2.latency_ms == 1000.0
     assert slo2.output_token_throughput == 10.0
     
-    print("✓ SLOConstraints 测试通过")
+    print("✓ SLOConstraints tests passed")
 
 
 def test_benchmark_config():
-    """测试 BenchmarkConfig dataclass"""
-    print("测试 BenchmarkConfig...")
+    """Test BenchmarkConfig dataclass"""
+    print("Testing BenchmarkConfig...")
     
     config = BenchmarkConfig(
         dataset_path=Path("test.jsonl"),
@@ -63,15 +63,15 @@ def test_benchmark_config():
     assert config.num_samples == [10, 20]
     assert config.concurrency_levels == [5, 10]
     assert config.mode == BenchmarkMode.MULTI_TURN
-    assert config.model_name == "gpt-3.5-turbo"  # 默认值
-    assert config.timeout == 300  # 默认值
+    assert config.model_name == "gpt-3.5-turbo"  # default value
+    assert config.timeout == 300  # default value
     
-    print("✓ BenchmarkConfig 测试通过")
+    print("✓ BenchmarkConfig tests passed")
 
 
 def test_request_metrics():
-    """测试 RequestMetrics dataclass"""
-    print("测试 RequestMetrics...")
+    """Test RequestMetrics dataclass"""
+    print("Testing RequestMetrics...")
     
     metrics = RequestMetrics(
         request_id="test_req_1",
@@ -95,14 +95,14 @@ def test_request_metrics():
     assert metrics.time_to_first_token == 0.5
     assert len(metrics.inter_token_latencies) == 3
     assert metrics.error is None
-    assert metrics.meets_slo is True  # 默认值
+    assert metrics.meets_slo is True  # default value
     
-    print("✓ RequestMetrics 测试通过")
+    print("✓ RequestMetrics tests passed")
 
 
 def test_round_metrics():
-    """测试 RoundMetrics dataclass"""
-    print("测试 RoundMetrics...")
+    """Test RoundMetrics dataclass"""
+    print("Testing RoundMetrics...")
     
     metrics = RoundMetrics(
         round_num=1,
@@ -161,12 +161,12 @@ def test_round_metrics():
     assert metrics.stage_name == "Test Stage"
     assert metrics.concurrency == 10
     
-    print("✓ RoundMetrics 测试通过")
+    print("✓ RoundMetrics tests passed")
 
 
 def test_session_data():
-    """测试 SessionData dataclass"""
-    print("测试 SessionData...")
+    """Test SessionData dataclass"""
+    print("Testing SessionData...")
     
     session = SessionData(
         session_id="session_1",
@@ -178,14 +178,14 @@ def test_session_data():
     assert len(session.user_messages) == 2
     assert session.user_messages[0] == "Hello"
     assert session.metadata == {"key": "value"}
-    assert len(session.assistant_messages) == 0  # 默认值
+    assert len(session.assistant_messages) == 0  # default value
     
-    print("✓ SessionData 测试通过")
+    print("✓ SessionData tests passed")
 
 
 def test_recipe_stage():
-    """测试 RecipeStage dataclass"""
-    print("测试 RecipeStage...")
+    """Test RecipeStage dataclass"""
+    print("Testing RecipeStage...")
     
     stage = RecipeStage(
         name="Test Stage",
@@ -199,7 +199,7 @@ def test_recipe_stage():
     assert stage.num_samples == [10, 20]
     assert stage.env == {"CUDA_VISIBLE_DEVICES": "0"}
     
-    # 测试空 env
+    # Test empty env
     stage2 = RecipeStage(
         name="Stage 2",
         concurrency_levels=[5],
@@ -207,12 +207,12 @@ def test_recipe_stage():
     )
     assert stage2.env == {}
     
-    print("✓ RecipeStage 测试通过")
+    print("✓ RecipeStage tests passed")
 
 
 def test_recipe():
-    """测试 Recipe dataclass"""
-    print("测试 Recipe...")
+    """Test Recipe dataclass"""
+    print("Testing Recipe...")
     
     recipe = Recipe(
         global_config={"dataset": "test.jsonl", "mode": "multi_turn"},
@@ -226,38 +226,38 @@ def test_recipe():
     assert len(recipe.stages) == 1
     assert recipe.mock_server["enabled"] is True
     
-    # 测试没有 mock_server
+    # Test without mock_server
     recipe2 = Recipe(
         global_config={},
         stages=[]
     )
     assert recipe2.mock_server is None
     
-    print("✓ Recipe 测试通过")
+    print("✓ Recipe tests passed")
 
 
 def test_benchmark_mode_enum():
-    """测试 BenchmarkMode 枚举"""
-    print("测试 BenchmarkMode...")
+    """Test BenchmarkMode enum"""
+    print("Testing BenchmarkMode...")
     
     assert BenchmarkMode.DUAL_ROUND.value == "dual_round"
     assert BenchmarkMode.MULTI_TURN.value == "multi_turn"
     
-    # 测试从字符串创建
+    # Test creating from string
     mode1 = BenchmarkMode("dual_round")
     assert mode1 == BenchmarkMode.DUAL_ROUND
     
     mode2 = BenchmarkMode("multi_turn")
     assert mode2 == BenchmarkMode.MULTI_TURN
     
-    # 测试无效值
+    # Test invalid value
     try:
         BenchmarkMode("invalid")
-        assert False, "应该抛出 ValueError"
+        assert False, "Should raise ValueError"
     except ValueError:
         pass
     
-    print("✓ BenchmarkMode 测试通过")
+    print("✓ BenchmarkMode tests passed")
 
 
 if __name__ == '__main__':
@@ -272,10 +272,10 @@ if __name__ == '__main__':
         test_benchmark_mode_enum()
         
         print("\n" + "=" * 60)
-        print("所有 dataclass 测试通过! ✓")
+        print("All dataclass tests passed! ✓")
         print("=" * 60)
     except AssertionError as e:
-        print(f"\n❌ 测试失败: {e}")
+        print(f"\n❌ Test failed: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

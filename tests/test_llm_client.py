@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-测试 LLMClient 的功能
+Test LLMClient functionality
 """
 
 import asyncio
@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from dual_round_benchmarker import (
+from fluxperf import (
     OpenAIClient,
     BenchmarkConfig,
     RequestMetrics
@@ -17,8 +17,8 @@ from dual_round_benchmarker import (
 
 
 async def test_client_initialization():
-    """测试客户端初始化"""
-    print("测试 OpenAIClient 初始化...")
+    """Test client initialization"""
+    print("Testing OpenAIClient initialization...")
     
     config = BenchmarkConfig(
         dataset_path=Path("test.jsonl"),
@@ -34,12 +34,12 @@ async def test_client_initialization():
     assert len(client.requests_log) == 0
     assert len(client.debug_entries) == 0
     
-    print("✓ OpenAIClient 初始化测试通过")
+    print("✓ OpenAIClient initialization tests passed")
 
 
 async def test_client_lifecycle():
-    """测试客户端生命周期"""
-    print("测试 OpenAIClient 生命周期...")
+    """Test client lifecycle"""
+    print("Testing OpenAIClient lifecycle...")
     
     config = BenchmarkConfig(
         dataset_path=Path("test.jsonl"),
@@ -53,12 +53,12 @@ async def test_client_lifecycle():
     async with client:
         assert client.session is not None
     
-    print("✓ OpenAIClient 生命周期测试通过")
+    print("✓ OpenAIClient lifecycle tests passed")
 
 
 async def test_build_payload():
-    """测试请求 payload 构建"""
-    print("测试 payload 构建...")
+    """Test request payload construction"""
+    print("Testing payload construction...")
     
     config = BenchmarkConfig(
         dataset_path=Path("test.jsonl"),
@@ -82,8 +82,8 @@ async def test_build_payload():
     session_id = "session_1"
     turn_index = 1
     
-    # 由于 send_completion_request 是私有方法，我们测试它会创建的 payload
-    # 通过检查 save_requests 模式
+    # Since send_completion_request is private, we test the payload it creates
+    # by checking save_requests mode
     config_with_save = BenchmarkConfig(
         dataset_path=Path("test.jsonl"),
         endpoint_url="http://localhost:8000",
@@ -101,12 +101,12 @@ async def test_build_payload():
     assert config_with_save.max_output_tokens == 100
     assert config_with_save.model_name == "test-model"
     
-    print("✓ Payload 构建测试通过")
+    print("✓ Payload construction tests passed")
 
 
 async def test_metrics_initialization():
-    """测试 metrics 初始化"""
-    print("测试 RequestMetrics 初始化...")
+    """Test metrics initialization"""
+    print("Testing RequestMetrics initialization...")
     
     metrics = RequestMetrics(
         request_id="req_1",
@@ -130,7 +130,7 @@ async def test_metrics_initialization():
     assert len(metrics.inter_token_latencies) == 0
     assert metrics.history_truncated == 0
     
-    print("✓ RequestMetrics 初始化测试通过")
+    print("✓ RequestMetrics initialization tests passed")
 
 
 if __name__ == '__main__':
@@ -141,15 +141,15 @@ if __name__ == '__main__':
         asyncio.run(test_metrics_initialization())
         
         print("\n" + "=" * 60)
-        print("所有 LLMClient 测试通过! ✓")
+        print("All LLMClient tests passed! ✓")
         print("=" * 60)
     except AssertionError as e:
-        print(f"\n❌ 测试失败: {e}")
+        print(f"\n❌ Test failed: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ 发生错误: {e}")
+        print(f"\n❌ Error occurred: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

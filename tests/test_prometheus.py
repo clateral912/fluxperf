@@ -106,10 +106,10 @@ def start_server(port, handler_class):
 
 def run_test():
     print("=" * 70)
-    print("Prometheus 集成功能健康检查")
+    print("Prometheus Integration Health Check")
     print("=" * 70)
     
-    print("\n[1/7] 启动 Mock Prometheus 服务器...")
+    print("\n[1/7] Starting Mock Prometheus server...")
     prom_thread = threading.Thread(
         target=start_server,
         args=(PROMETHEUS_PORT, MockPrometheusHandler),
@@ -117,9 +117,9 @@ def run_test():
     )
     prom_thread.start()
     time.sleep(1)
-    print(f"✓ Mock Prometheus 服务器已启动在端口 {PROMETHEUS_PORT}")
+    print(f"✓ Mock Prometheus server started on port {PROMETHEUS_PORT}")
     
-    print("\n[2/7] 启动 Mock OpenAI 服务器...")
+    print("\n[2/7] Starting Mock OpenAI server...")
     openai_thread = threading.Thread(
         target=start_server,
         args=(PORT, MockOpenAIHandler),
@@ -127,35 +127,35 @@ def run_test():
     )
     openai_thread.start()
     time.sleep(1)
-    print(f"✓ Mock OpenAI 服务器已启动在端口 {PORT}")
+    print(f"✓ Mock OpenAI server started on port {PORT}")
     
-    print("\n[3/7] 检查测试数据文件...")
+    print("\n[3/7] Checking test data file...")
     dataset_path = ROOT_DIR / "examples/example_dataset.json"
     if not dataset_path.exists():
-        print(f"✗ 未找到数据集文件: {dataset_path}")
+        print(f"✗ Dataset file not found: {dataset_path}")
         return False
-    print(f"✓ 数据集文件存在: {dataset_path}")
+    print(f"✓ Dataset file exists: {dataset_path}")
     
-    print("\n[4/7] 验证 Prometheus endpoint...")
+    print("\n[4/7] Verifying Prometheus endpoint...")
     import urllib.request
     try:
         response = urllib.request.urlopen(f"http://localhost:{PROMETHEUS_PORT}/metrics")
         content = response.read().decode()
         if "lmcache_hit_rate" in content and "memory_usage_bytes" in content:
-            print("✓ Prometheus endpoint 返回正确的指标格式")
+            print("✓ Prometheus endpoint returns correct metrics format")
         else:
-            print("✗ Prometheus endpoint 返回的指标不完整")
+            print("✗ Prometheus endpoint returns incomplete metrics")
             return False
     except Exception as e:
-        print(f"✗ 无法访问 Prometheus endpoint: {e}")
+        print(f"✗ Cannot access Prometheus endpoint: {e}")
         return False
     
-    print("\n[5/7] 运行压测脚本（带 Prometheus 指标收集）...")
+    print("\n[5/7] Running benchmark script (with Prometheus metrics collection)...")
     import subprocess
     
     cmd = [
         sys.executable,
-        str(ROOT_DIR / "dual_round_benchmarker.py"),
+        str(ROOT_DIR / "fluxperf.py"),
         "--dataset", str(dataset_path),
         "--endpoint", f"http://localhost:{PORT}/v1/chat/completions",
         "--num-samples", "3",
@@ -175,41 +175,41 @@ def run_test():
         )
         
         if result.returncode != 0:
-            print(f"✗ 脚本执行失败，返回码: {result.returncode}")
-            print("\n标准输出:")
+            print(f"✗ Script execution failed, return code: {result.returncode}")
+            print("\nStdout:")
             print(result.stdout)
-            print("\n标准错误:")
+            print("\nStderr:")
             print(result.stderr)
             return False
         
-        print("✓ 脚本执行成功")
+        print("✓ Script executed successfully")
         
         if "Prometheus 指标:" in result.stdout:
-            print("✓ 控制台输出包含 Prometheus 指标")
+            print("✓ Console output contains Prometheus metrics")
         else:
-            print("⚠ 警告: 控制台输出未找到 Prometheus 指标")
+            print("⚠ Warning: Console output does not contain Prometheus metrics")
         
     except subprocess.TimeoutExpired:
-        print("✗ 脚本执行超时")
+        print("✗ Script execution timeout")
         return False
     except Exception as e:
-        print(f"✗ 运行脚本时出错: {e}")
+        print(f"✗ Error running script: {e}")
         return False
     
-    print("\n[6/7] 验证输出文件...")
+    print("\n[6/7] Verifying output files...")
     
     json_output = Path("test_results.json")
     if json_output.exists():
-        print(f"✓ JSON 输出文件已生成: {json_output}")
+        print(f"✓ JSON output file generated: {json_output}")
         try:
             with open(json_output, 'r') as f:
                 data = json.load(f)
-                print(f"  - 包含 {len(data)} 个并发层级的结果")
+                print(f"  - Contains results for {len(data)} concurrency levels")
         except Exception as e:
-            print(f"✗ 无法解析 JSON 文件: {e}")
+            print(f"✗ Cannot parse JSON file: {e}")
             return False
     else:
-        print(f"✗ JSON 输出文件未生成: {json_output}")
+        print(f"✗ JSON output file not generated: {json_output}")
         return False
     
     test_results_dir = Path("test_results")
@@ -218,27 +218,27 @@ def run_test():
         params_files = list(test_results_dir.glob("benchmark_*_params.txt"))
         
         if csv_files:
-            print(f"✓ CSV 输出文件已生成: {csv_files[0].name}")
+            print(f"✓ CSV output file generated: {csv_files[0].name}")
             
             with open(csv_files[0], 'r', encoding='utf-8') as f:
                 csv_content = f.read()
                 if "Prometheus 指标" in csv_content and "lmcache_hit_rate" in csv_content:
-                    print("✓ CSV 文件包含 Prometheus 指标数据")
+                    print("✓ CSV file contains Prometheus metrics data")
                 else:
-                    print("⚠ 警告: CSV 文件未找到 Prometheus 指标")
+                    print("⚠ Warning: CSV file does not contain Prometheus metrics")
         else:
-            print("✗ CSV 输出文件未生成")
+            print("✗ CSV output file not generated")
             return False
         
         if params_files:
-            print(f"✓ 参数文件已生成: {params_files[0].name}")
+            print(f"✓ Parameters file generated: {params_files[0].name}")
         else:
-            print("⚠ 警告: 参数文件未生成")
+            print("⚠ Warning: Parameters file not generated")
     else:
-        print("✗ 输出目录未创建")
+        print("✗ Output directory not created")
         return False
     
-    print("\n[7/7] 验证 Prometheus 指标数据质量...")
+    print("\n[7/7] Verifying Prometheus metrics data quality...")
     
     with open(csv_files[0], 'r', encoding='utf-8') as f:
         lines = f.readlines()
@@ -256,22 +256,22 @@ def run_test():
         
         all_found = all(found_metrics.values())
         if all_found:
-            print("✓ 所有指定的 Prometheus 指标都已收集")
+            print("✓ All specified Prometheus metrics collected")
         else:
             missing = [k for k, v in found_metrics.items() if not v]
-            print(f"⚠ 警告: 以下指标未找到: {', '.join(missing)}")
+            print(f"⚠ Warning: The following metrics not found: {', '.join(missing)}")
     
     print("\n" + "=" * 70)
-    print("健康检查完成!")
+    print("Health Check Complete!")
     print("=" * 70)
     
-    print("\n测试摘要:")
-    print("✓ Mock 服务器启动成功")
-    print("✓ Prometheus 指标收集功能正常")
-    print("✓ 输出文件生成正常")
-    print("✓ 数据格式正确")
+    print("\nTest Summary:")
+    print("✓ Mock servers started successfully")
+    print("✓ Prometheus metrics collection working")
+    print("✓ Output files generated successfully")
+    print("✓ Data format correct")
     
-    print("\n清理建议:")
+    print("\nCleanup suggestion:")
     print("  rm -rf test_results test_results.json")
     
     return True
@@ -282,10 +282,10 @@ def main():
         success = run_test()
         sys.exit(0 if success else 1)
     except KeyboardInterrupt:
-        print("\n\n测试被中断")
+        print("\n\nTest interrupted")
         sys.exit(1)
     except Exception as e:
-        print(f"\n✗ 测试过程中出现异常: {e}")
+        print(f"\n✗ Exception occurred during test: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

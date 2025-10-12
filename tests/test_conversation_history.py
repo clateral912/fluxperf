@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from dual_round_benchmarker import ConversationHistory, count_tokens
+from fluxperf import ConversationHistory, count_tokens
 
 
 class ConversationHistoryTests(unittest.TestCase):

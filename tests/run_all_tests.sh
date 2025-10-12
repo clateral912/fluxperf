@@ -1,12 +1,12 @@
 #!/bin/bash
 
-# 运行所有单元测试
+# Run all unit tests
 
 set -e
 
 echo "=========================================="
-echo "运行所有单元测试"
-echo "=========================================="
+echo "Running All Unit Tests"
+echo "========================================="
 echo ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,7 +16,7 @@ PASSED=0
 FAILED=0
 TOTAL=0
 
-# 测试文件列表
+# Test file list
 TESTS=(
     "tests/test_dataclasses.py"
     "tests/test_utils.py"
@@ -28,39 +28,39 @@ TESTS=(
     "tests/test_conversation_history.py"
 )
 
-# 运行每个测试
+# Run each test
 for test in "${TESTS[@]}"; do
     if [ -f "$test" ]; then
         TOTAL=$((TOTAL + 1))
         echo "=========================================="
-        echo "运行: $test"
-        echo "=========================================="
+        echo "Running: $test"
+        echo "========================================="
         
         if python "$test"; then
             PASSED=$((PASSED + 1))
-            echo "✓ $test 通过"
+            echo "✓ $test passed"
         else
             FAILED=$((FAILED + 1))
-            echo "✗ $test 失败"
+            echo "✗ $test failed"
         fi
         echo ""
     else
-        echo "⚠️  $test 不存在，跳过"
+        echo "⚠️  $test does not exist, skipping"
     fi
 done
 
 echo "=========================================="
-echo "测试总结"
+echo "Test Summary"
 echo "=========================================="
-echo "总计: $TOTAL"
-echo "通过: $PASSED"
-echo "失败: $FAILED"
-echo "=========================================="
+echo "Total: $TOTAL"
+echo "Passed: $PASSED"
+echo "Failed: $FAILED"
+echo "========================================="
 
 if [ $FAILED -eq 0 ]; then
-    echo "✓ 所有测试通过!"
+    echo "✓ All tests passed!"
     exit 0
 else
-    echo "✗ 有测试失败"
+    echo "✗ Some tests failed"
     exit 1
 fi

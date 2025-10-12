@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-测试工具函数
+Test utility functions
 """
 
 import sys
@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from dual_round_benchmarker import (
+from fluxperf import (
     count_tokens,
     DatasetLoader,
     SLOLoader,
@@ -18,8 +18,8 @@ from dual_round_benchmarker import (
 
 
 def test_count_tokens():
-    """测试 token 计数函数"""
-    print("测试 count_tokens...")
+    """Test token counting function"""
+    print("Testing count_tokens...")
     
     # 正常文本
     assert count_tokens("Hello world") == 2
@@ -38,12 +38,12 @@ def test_count_tokens():
     # None 处理
     assert count_tokens(None) == 0
     
-    print("✓ count_tokens 测试通过")
+    print("✓ count_tokens tests passed")
 
 
 def test_metrics_analyzer_calculate_percentile():
-    """测试百分位数计算"""
-    print("测试 MetricsAnalyzer.calculate_percentile...")
+    """Test percentile calculation"""
+    print("Testing MetricsAnalyzer.calculate_percentile...")
     
     values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     
@@ -65,12 +65,12 @@ def test_metrics_analyzer_calculate_percentile():
     # 单个值
     assert MetricsAnalyzer.calculate_percentile([5], 50) == 5
     
-    print("✓ calculate_percentile 测试通过")
+    print("✓ calculate_percentile tests passed")
 
 
 def test_metrics_analyzer_truncate_text():
-    """测试文本截断"""
-    print("测试 MetricsAnalyzer._truncate_text...")
+    """Test text truncation"""
+    print("Testing MetricsAnalyzer._truncate_text...")
     
     # 短文本
     text = "Hello"
@@ -86,12 +86,12 @@ def test_metrics_analyzer_truncate_text():
     text = "1234567890"
     assert MetricsAnalyzer._truncate_text(text, 10) == "1234567890"
     
-    print("✓ _truncate_text 测试通过")
+    print("✓ _truncate_text tests passed")
 
 
 def test_dataset_loader_sample_entries():
-    """测试数据集采样"""
-    print("测试 DatasetLoader.sample_entries...")
+    """Test dataset sampling"""
+    print("Testing DatasetLoader.sample_entries...")
     
     dataset = [{"id": i, "text": f"text_{i}"} for i in range(100)]
     
@@ -111,14 +111,14 @@ def test_dataset_loader_sample_entries():
     sampled = DatasetLoader.sample_entries([], 10)
     assert len(sampled) == 0
     
-    print("✓ sample_entries 测试通过")
+    print("✓ sample_entries tests passed")
 
 
 def test_slo_loader_validation():
-    """测试 SLO 验证逻辑"""
-    print("测试 SLOLoader 验证...")
+    """Test SLO validation logic"""
+    print("Testing SLOLoader validation...")
     
-    from dual_round_benchmarker import SLOConstraints, RequestMetrics
+    from fluxperf import SLOConstraints, RequestMetrics
     
     slo = SLOConstraints(
         ttft_ms=100.0,
@@ -221,12 +221,12 @@ def test_slo_loader_validation():
     
     assert SLOLoader.validate_slo(error_metrics, slo) is False
     
-    print("✓ SLO 验证测试通过")
+    print("✓ SLO validation tests passed")
 
 
 def test_recipe_loader_validation():
-    """测试 Recipe 加载验证"""
-    print("测试 RecipeLoader 验证...")
+    """Test Recipe loading validation"""
+    print("Testing RecipeLoader validation...")
     
     import tempfile
     import yaml
@@ -257,7 +257,7 @@ def test_recipe_loader_validation():
         assert recipe.global_config["dataset"] == "test.jsonl"
         assert len(recipe.stages) == 1
         assert recipe.stages[0].name == "Stage 1"
-        print("  ✓ 有效 recipe 加载成功")
+        print("  ✓ Valid recipe loaded successfully")
     finally:
         temp_path.unlink()
     
@@ -275,16 +275,16 @@ def test_recipe_loader_validation():
                 RecipeLoader.load_recipe(temp_path),
                 RecipeStage("test", [5], [10])
             )
-            assert False, "应该抛出 ValueError"
+            assert False, "Should raise ValueError"
         except ValueError as e:
-            assert "不支持的模式" in str(e)
-            print("  ✓ 无效模式正确拒绝")
+            assert "Unsupported mode" in str(e) or "不支持的模式" in str(e)
+            print("  ✓ Invalid mode correctly rejected")
         finally:
             temp_path.unlink()
     except Exception:
         pass
     
-    print("✓ RecipeLoader 验证测试通过")
+    print("✓ RecipeLoader validation tests passed")
 
 
 if __name__ == '__main__':
@@ -297,15 +297,15 @@ if __name__ == '__main__':
         test_recipe_loader_validation()
         
         print("\n" + "=" * 60)
-        print("所有工具函数测试通过! ✓")
+        print("All utility function tests passed! ✓")
         print("=" * 60)
     except AssertionError as e:
-        print(f"\n❌ 测试失败: {e}")
+        print(f"\n❌ Test failed: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ 发生错误: {e}")
+        print(f"\n❌ Error occurred: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
