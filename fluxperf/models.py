@@ -42,6 +42,7 @@ class BenchmarkConfig:
     reset_cache_between_rounds: bool = False
     reset_cache_between_concurrency: bool = False
     debug: bool = False
+    debug_verbose: bool = False
     debug_log_dir: Optional[Path] = None
     max_context_tokens: Optional[int] = None
 

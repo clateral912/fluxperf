@@ -63,7 +63,8 @@ class OpenAIClient:
         round_num: int,
         messages: Sequence[Dict[str, str]],
         session_id: str,
-        turn_index: int
+        turn_index: int,
+        semaphore_wait_start: Optional[float] = None
     ) -> RequestMetrics:
         payload = {
             "model": self.config.model_name,
@@ -79,7 +80,8 @@ class OpenAIClient:
         if self.config.max_output_tokens:
             payload["max_tokens"] = self.config.max_output_tokens
 
-        if self.config.save_requests or self.config.debug:
+        # 保存完整请求数据（仅在save_requests或debug_verbose时）
+        if self.config.save_requests or (self.config.debug and self.config.debug_verbose):
             entry = {
                 "request_id": request_id,
                 "round": round_num,
@@ -90,7 +92,7 @@ class OpenAIClient:
             }
             if self.config.save_requests:
                 self.requests_log.append(entry)
-            if self.config.debug:
+            if self.config.debug and self.config.debug_verbose:
                 self.debug_entries.append(entry)
 
         user_text = messages[-1]["content"] if messages else ""
@@ -109,8 +111,27 @@ class OpenAIClient:
             context_tokens=sum(count_tokens(msg["content"]) for msg in messages)
         )
 
+        # 轻量级debug日志：仅在debug模式（非verbose）时记录生命周期
+        lifecycle_entry = None
+        if self.config.debug and not self.config.debug_verbose:
+            lifecycle_entry = {
+                "request_id": request_id,
+                "round": round_num,
+                "session_id": session_id,
+                "turn_index": turn_index,
+                "created_at": time.time(),
+                "input_tokens": count_tokens(user_text),
+                "context_tokens": sum(count_tokens(msg["content"]) for msg in messages),
+            }
+            # 如果有pending时间，记录
+            if semaphore_wait_start:
+                lifecycle_entry["pending_duration"] = time.time() - semaphore_wait_start
+
         try:
             start_time = time.time()
+            if lifecycle_entry:
+                lifecycle_entry["request_sent_at"] = start_time
+
             first_token_received = False
             last_token_time = start_time
             output_chunks = []
@@ -143,6 +164,9 @@ class OpenAIClient:
                                     if not first_token_received:
                                         metrics.time_to_first_token = current_time - start_time
                                         first_token_received = True
+                                        # 记录首token时间到生命周期
+                                        if lifecycle_entry:
+                                            lifecycle_entry["first_token_at"] = current_time
                                     else:
                                         itl = (current_time - last_token_time) * 1000
                                         metrics.inter_token_latencies.append(itl)
@@ -157,14 +181,30 @@ class OpenAIClient:
             metrics.output_text = ''.join(output_chunks)
             metrics.output_tokens = count_tokens(metrics.output_text)
             metrics.total_latency = end_time - start_time
-            
+
             if metrics.output_tokens > 0 and metrics.total_latency > 0:
                 metrics.throughput = metrics.output_tokens / metrics.total_latency
+
+            # 记录成功完成的生命周期
+            if lifecycle_entry:
+                lifecycle_entry["completed_at"] = end_time
+                lifecycle_entry["output_tokens"] = metrics.output_tokens
+                lifecycle_entry["ttft_ms"] = metrics.time_to_first_token * 1000
+                lifecycle_entry["total_latency_ms"] = metrics.total_latency * 1000
+                lifecycle_entry["throughput"] = metrics.throughput
+                self.debug_entries.append(lifecycle_entry)
 
         except Exception as e:
             error_msg = str(e) if str(e) else type(e).__name__
             metrics.error = error_msg
             print(f"Request {request_id} (round {round_num}) failed: {error_msg}")
+
+            # 记录失败的生命周期
+            if lifecycle_entry:
+                lifecycle_entry["failed_at"] = time.time()
+                lifecycle_entry["error"] = error_msg
+                lifecycle_entry["error_type"] = type(e).__name__
+                self.debug_entries.append(lifecycle_entry)
 
         return metrics
 

@@ -262,6 +262,7 @@ class BenchmarkRunner:
             reset_cache_between_rounds=self.config.reset_cache_between_rounds,
             reset_cache_between_concurrency=self.config.reset_cache_between_concurrency,
             debug=self.config.debug,
+            debug_verbose=self.config.debug_verbose,
             debug_log_dir=self.config.debug_log_dir,
             max_context_tokens=self.config.max_context_tokens
         )
@@ -340,6 +341,8 @@ class BenchmarkRunner:
                     messages, context_tokens, truncated = history.prepare_request(sanitized_user)
                     request_id = f"round{round_num}_conc{concurrency}_{session.session_id}_turn{turn_index}"
 
+                    # 记录等待semaphore的开始时间（用于计算pending时间）
+                    semaphore_wait_start = time.time()
                     async with semaphore:
                         async with status_lock:
                             active_requests[request_id] = time.time()
@@ -348,7 +351,8 @@ class BenchmarkRunner:
                             round_num,
                             messages,
                             session_id=session.session_id,
-                            turn_index=turn_index
+                            turn_index=turn_index,
+                            semaphore_wait_start=semaphore_wait_start
                         )
                         async with status_lock:
                             active_requests.pop(request_id, None)

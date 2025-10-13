@@ -186,7 +186,13 @@ def main():
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Enable debug mode, save detailed debug logs"
+        help="Enable debug mode, save lightweight request lifecycle logs"
+    )
+
+    parser.add_argument(
+        "--debug-verbose",
+        action="store_true",
+        help="Enable verbose debug mode, save complete request payloads (large files)"
     )
 
     parser.add_argument(
@@ -288,6 +294,10 @@ def main():
                 recipe.global_config['debug'] = True
                 overrides.append(f"debug = True")
 
+            if args.debug_verbose:
+                recipe.global_config['debug_verbose'] = True
+                overrides.append(f"debug_verbose = True")
+
             if args.debug_log_dir is not None:
                 recipe.global_config['debug_log_dir'] = str(args.debug_log_dir)
                 overrides.append(f"debug_log_dir = {args.debug_log_dir}")
@@ -359,6 +369,7 @@ def main():
         reset_cache_between_rounds=args.reset_cache_between_rounds,
         reset_cache_between_concurrency=args.reset_cache_between_concurrency,
         debug=args.debug,
+        debug_verbose=args.debug_verbose,
         debug_log_dir=args.debug_log_dir,
         max_context_tokens=args.max_context_tokens
     )

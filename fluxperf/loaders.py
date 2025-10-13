@@ -202,6 +202,7 @@ class RecipeLoader:
             reset_cache_between_rounds=g.get('reset_cache_between_rounds', False),
             reset_cache_between_concurrency=g.get('reset_cache_between_concurrency', False),
             debug=g.get('debug', False),
+            debug_verbose=g.get('debug_verbose', False),
             debug_log_dir=Path(g['debug_log_dir']) if g.get('debug_log_dir') else None,
             max_context_tokens=g.get('max_context_tokens')
         )
