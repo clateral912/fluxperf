@@ -162,8 +162,9 @@ class OpenAIClient:
                 metrics.throughput = metrics.output_tokens / metrics.total_latency
 
         except Exception as e:
-            metrics.error = str(e)
-            print(f"Request {request_id} (round {round_num}) failed: {e}")
+            error_msg = str(e) if str(e) else type(e).__name__
+            metrics.error = error_msg
+            print(f"Request {request_id} (round {round_num}) failed: {error_msg}")
 
         return metrics
 

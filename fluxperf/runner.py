@@ -216,24 +216,31 @@ class BenchmarkRunner:
             total=total_count,
             desc=f"Round {round_num} (concurrency: {concurrency})",
             ncols=120,
-            bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}'
+            bar_format='{desc}: {percentage:3.0f}%|{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}] {postfix}',
+            smoothing=0.1
         )
 
         active_requests: Dict[str, float] = {}
         status_lock = asyncio.Lock()
         results: Dict[int, RequestMetrics] = {}
+        last_postfix = ""
 
         async def update_status():
+            nonlocal last_postfix
             while True:
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(1.0)
                 async with status_lock:
                     if active_requests:
                         oldest_req_id, oldest_start = min(active_requests.items(), key=lambda x: x[1])
                         wait_time = time.time() - oldest_start
-                        postfix = f"Waiting: {oldest_req_id[:40]:40s} ({wait_time:6.1f}s)"
-                        pbar.set_postfix_str(postfix, refresh=True)
+                        new_postfix = f"Waiting: {oldest_req_id[:40]:40s} ({wait_time:6.1f}s)"
+                        if new_postfix != last_postfix:
+                            pbar.set_postfix_str(new_postfix, refresh=False)
+                            last_postfix = new_postfix
                     else:
-                        pbar.set_postfix_str(" " * 54, refresh=False)
+                        if last_postfix:
+                            pbar.set_postfix_str("", refresh=False)
+                            last_postfix = ""
 
         temp_config = BenchmarkConfig(
             dataset_path=self.config.dataset_path,
