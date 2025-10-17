@@ -1,7 +1,9 @@
 import asyncio
+import json
 import os
 import random
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import aiohttp
@@ -27,6 +29,24 @@ class BenchmarkRunner:
         self.slo = slo
         self.results: List[RequestMetrics] = []
         self.conversation_state: Dict[str, ConversationHistory] = {}
+        self.session_log_dir: Optional[Path] = None
+        self._session_log_lock: Optional[asyncio.Lock] = None
+        self._session_logs: Dict[str, Dict[str, Any]] = {}
+
+        # Initialize tokenizer if configured
+        if config.tokenizer_name:
+            from .tokenizer import initialize_tokenizer
+            try:
+                print(f"Initializing tokenizer: {config.tokenizer_name}")
+                initialize_tokenizer(
+                    config.tokenizer_name,
+                    config.tokenizer_trust_remote_code,
+                    config.tokenizer_revision
+                )
+                print(f"✓ Tokenizer initialized successfully")
+            except Exception as e:
+                print(f"Warning: Failed to initialize tokenizer: {e}")
+                print(f"Falling back to simple word count for token estimation")
 
     def _reset_conversation_state(self, sessions: List[SessionData]):
         for session in sessions:
@@ -187,12 +207,135 @@ class BenchmarkRunner:
         except Exception as e:
             print(f"Warning: KVCache reset failed: {e}")
 
+    async def _flush_session_logs(self):
+        if not self.session_log_dir or not self._session_logs:
+            return
+
+        items = list(self._session_logs.items())
+        lock = self._session_log_lock
+        if lock is None:
+            lock = asyncio.Lock()
+            self._session_log_lock = lock
+
+        total_bytes = 0
+        async with lock:
+            for session_id, payload in items:
+                safe_session_id = session_id.replace('/', '_')
+                round_num = payload["summary"].get("round", 0)
+                concurrency = payload["summary"].get("concurrency", 0)
+                filename = self.session_log_dir / f"round{round_num}_conc{concurrency}_{safe_session_id}.json"
+                serialized = json.dumps(payload, ensure_ascii=False, indent=2)
+                with open(filename, "w", encoding="utf-8") as f:
+                    f.write(serialized)
+                total_bytes += len(serialized.encode("utf-8"))
+
+        file_count = len(items)
+        self._session_logs.clear()
+        print(
+            f"  → Session logs saved: {self.session_log_dir} "
+            f"({file_count} files, {total_bytes / 1024:.2f} KiB)"
+        )
+
+    async def _record_session_turn(
+        self,
+        session_id: str,
+        round_num: int,
+        concurrency: int,
+        session_metadata: Dict[str, Any],
+        turn_payload: Dict[str, Any]
+    ):
+        if not self.session_log_dir:
+            return
+
+        key = session_id
+        if key not in self._session_logs:
+            self._session_logs[key] = {
+                "summary": {
+                    "session_id": session_id,
+                    "round": round_num,
+                    "concurrency": concurrency,
+                    "total_turns": 0,
+                    "metadata": session_metadata,
+                    "timestamps": {
+                        "started_at": None,
+                        "ended_at": None
+                    }
+                },
+                "turns": []
+            }
+
+        entry = self._session_logs[key]
+        entry["turns"].append(turn_payload)
+        entry["summary"]["total_turns"] = len(entry["turns"])
+
+        created_at = turn_payload["response"].get("created_at")
+        finished_at = turn_payload["response"].get("finished_at")
+
+        if created_at is not None:
+            timestamps = entry["summary"]["timestamps"]
+            if timestamps["started_at"] is None or created_at < timestamps["started_at"]:
+                timestamps["started_at"] = created_at
+        if finished_at is not None:
+            timestamps = entry["summary"]["timestamps"]
+            if timestamps["ended_at"] is None or finished_at > timestamps["ended_at"]:
+                timestamps["ended_at"] = finished_at
+
+        turn_metrics = turn_payload.get("metrics", {})
+        summary_metrics = entry["summary"].setdefault("metrics_summary", {
+            "avg_ttft_ms": 0.0,
+            "avg_itl_ms": 0.0,
+            "avg_throughput_tokens_per_s": 0.0,
+            "total_output_tokens": 0.0,
+            "total_input_tokens": 0.0,
+            "avg_total_latency_ms": 0.0,
+            "errors": 0
+        })
+
+        count = len(entry["turns"])
+        summary_metrics["total_output_tokens"] += turn_metrics.get("output_tokens", 0)
+        summary_metrics["total_input_tokens"] += turn_metrics.get("input_tokens", 0)
+        if turn_payload["response"].get("error"):
+            summary_metrics["errors"] += 1
+
+        # Update running averages
+        def update_avg(current_avg: float, new_value: float, n: int) -> float:
+            return ((current_avg * (n - 1)) + new_value) / n if n > 0 else new_value
+
+        summary_metrics["avg_ttft_ms"] = update_avg(summary_metrics["avg_ttft_ms"], turn_metrics.get("ttft_ms", 0.0), count)
+        summary_metrics["avg_itl_ms"] = update_avg(summary_metrics["avg_itl_ms"], turn_metrics.get("avg_itl_ms", 0.0), count)
+        summary_metrics["avg_throughput_tokens_per_s"] = update_avg(
+            summary_metrics["avg_throughput_tokens_per_s"],
+            turn_metrics.get("throughput_tokens_per_s", 0.0),
+            count
+        )
+        summary_metrics["avg_total_latency_ms"] = update_avg(
+            summary_metrics["avg_total_latency_ms"],
+            turn_metrics.get("total_latency_ms", 0.0),
+            count
+        )
+
+    async def _prepare_session_logging(self, round_num: int, concurrency: int):
+        if not (self.config.debug and self.config.debug_verbose):
+            self.session_log_dir = None
+            self._session_logs.clear()
+            return
+
+        base_dir = self.config.debug_log_dir or Path("debug_logs")
+        dir_name = f"concurrency_{concurrency}"
+        session_dir = base_dir / dir_name
+        session_dir.mkdir(parents=True, exist_ok=True)
+        self.session_log_dir = session_dir
+        self._session_logs.clear()
+        if self._session_log_lock is None:
+            self._session_log_lock = asyncio.Lock()
+
     async def run_round(
         self,
         round_num: int,
         concurrency: int,
         sessions: List[SessionData]
     ) -> Tuple[List[RequestMetrics], Dict[str, List[float]]]:
+        await self._prepare_session_logging(round_num, concurrency)
         self._reset_conversation_state(sessions)
 
         turns: List[Tuple[str, int, str]] = []
@@ -220,7 +363,8 @@ class BenchmarkRunner:
             smoothing=0.1
         )
 
-        active_requests: Dict[str, float] = {}
+        # 存储活动请求：{request_id: (start_time, input_length)}
+        active_requests: Dict[str, Tuple[float, int]] = {}
         status_lock = asyncio.Lock()
         results: Dict[int, RequestMetrics] = {}
         last_postfix = ""
@@ -231,9 +375,14 @@ class BenchmarkRunner:
                 await asyncio.sleep(1.0)
                 async with status_lock:
                     if active_requests:
-                        oldest_req_id, oldest_start = min(active_requests.items(), key=lambda x: x[1])
+                        # 找到等待时间最长的请求
+                        oldest_req_id, (oldest_start, input_len) = min(
+                            active_requests.items(),
+                            key=lambda x: x[1][0]
+                        )
                         wait_time = time.time() - oldest_start
-                        new_postfix = f"Waiting: {oldest_req_id[:40]:40s} ({wait_time:6.1f}s)"
+                        # 格式：Waiting: reqid ISL=xxxxx (wait_time)
+                        new_postfix = f"Waiting: {oldest_req_id[:35]:35s} ISL={input_len:5d} ({wait_time:6.1f}s)"
                         if new_postfix != last_postfix:
                             pbar.set_postfix_str(new_postfix, refresh=False)
                             last_postfix = new_postfix
@@ -310,6 +459,7 @@ class BenchmarkRunner:
 
             async def process_session(session: SessionData):
                 history = self.conversation_state[session.session_id]
+                session_turns: List[Dict[str, Any]] = []
                 for turn_index, user_text in enumerate(session.user_messages):
                     turn_key = (session.session_id, turn_index)
                     if turn_key not in order_map:
@@ -341,11 +491,16 @@ class BenchmarkRunner:
                     messages, context_tokens, truncated = history.prepare_request(sanitized_user)
                     request_id = f"round{round_num}_conc{concurrency}_{session.session_id}_turn{turn_index}"
 
+                    # 计算输入长度（所有messages的总token数）
+                    from .tokenizer import count_tokens
+                    input_length = sum(count_tokens(msg["content"]) for msg in messages)
+
                     # 记录等待semaphore的开始时间（用于计算pending时间）
                     semaphore_wait_start = time.time()
                     async with semaphore:
                         async with status_lock:
-                            active_requests[request_id] = time.time()
+                            # 存储请求ID、开始时间和输入长度
+                            active_requests[request_id] = (time.time(), input_length)
                         result = await client.send_completion_request(
                             request_id,
                             round_num,
@@ -364,6 +519,45 @@ class BenchmarkRunner:
                     result.history_truncated = truncated + assistant_truncated
                     results[turn_order] = result
                     pbar.update(1)
+
+                    if self.config.debug and self.config.debug_verbose:
+                        serialized_messages = [
+                            {"role": msg.get("role", ""), "content": msg.get("content", "")}
+                            for msg in messages
+                        ]
+                        session_turns.append({
+                            "turn_index": turn_index,
+                            "request_id": request_id,
+                            "messages": serialized_messages,
+                            "response": {
+                                "text": result.output_text,
+                                "error": result.error,
+                                "created_at": result.start_timestamp,
+                                "finished_at": result.end_timestamp
+                            },
+                            "metrics": {
+                                "ttft_ms": result.time_to_first_token * 1000,
+                                "avg_itl_ms": (
+                                    sum(result.inter_token_latencies) / len(result.inter_token_latencies)
+                                ) if result.inter_token_latencies else 0.0,
+                                "throughput_tokens_per_s": result.throughput,
+                                "output_tokens": result.output_tokens,
+                                "context_tokens": result.context_tokens,
+                                "input_tokens": result.input_tokens,
+                                "total_latency_ms": result.total_latency * 1000
+                            }
+                        })
+
+
+                if self.config.debug and self.config.debug_verbose and session_turns:
+                    for turn in session_turns:
+                        await self._record_session_turn(
+                            session.session_id,
+                            round_num,
+                            concurrency,
+                            session.metadata,
+                            turn
+                        )
 
             session_tasks = [asyncio.create_task(process_session(session)) for session in sessions]
             await asyncio.gather(*session_tasks)
@@ -390,6 +584,8 @@ class BenchmarkRunner:
                     round_start_time,
                     round_end_time
                 )
+
+        await self._flush_session_logs()
 
         round_results = [results[i] for i in range(total_count)]
         for result in round_results:

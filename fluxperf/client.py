@@ -16,8 +16,6 @@ class OpenAIClient:
         self.concurrency = concurrency
         self.session: Optional[aiohttp.ClientSession] = None
         self.requests_log = []
-        self.debug_entries: List[Dict[str, Any]] = []
-        self.debug_metadata: Dict[str, Any] = {}
 
     async def __aenter__(self):
         headers = {
@@ -40,19 +38,6 @@ class OpenAIClient:
                     f.write(json.dumps(req, ensure_ascii=False) + '\n')
             file_size = log_file.stat().st_size
             print(f"  → Request log saved: {log_file} ({file_size / 1024:.2f} KiB)")
-
-        if self.config.debug and self.debug_entries:
-            log_dir = self.config.debug_log_dir or Path("debug_logs")
-            log_dir.mkdir(parents=True, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            log_file = log_dir / f"debug_round{self.round_num}_conc{self.concurrency}_{timestamp}.json"
-            debug_payload = {
-                "metadata": self.debug_metadata,
-                "entries": self.debug_entries
-            }
-            with open(log_file, "w", encoding="utf-8") as f:
-                json.dump(debug_payload, f, ensure_ascii=False, indent=2)
-            print(f"  → Debug log saved: {log_file}")
 
         if self.session:
             await self.session.close()
@@ -80,8 +65,8 @@ class OpenAIClient:
         if self.config.max_output_tokens:
             payload["max_tokens"] = self.config.max_output_tokens
 
-        # 保存完整请求数据（仅在save_requests或debug_verbose时）
-        if self.config.save_requests or (self.config.debug and self.config.debug_verbose):
+        # 保存完整请求数据（仅在save_requests时）
+        if self.config.save_requests:
             entry = {
                 "request_id": request_id,
                 "round": round_num,
@@ -90,10 +75,7 @@ class OpenAIClient:
                 "session_id": session_id,
                 "turn_index": turn_index
             }
-            if self.config.save_requests:
-                self.requests_log.append(entry)
-            if self.config.debug and self.config.debug_verbose:
-                self.debug_entries.append(entry)
+            self.requests_log.append(entry)
 
         user_text = messages[-1]["content"] if messages else ""
         metrics = RequestMetrics(
@@ -111,26 +93,8 @@ class OpenAIClient:
             context_tokens=sum(count_tokens(msg["content"]) for msg in messages)
         )
 
-        # 轻量级debug日志：仅在debug模式（非verbose）时记录生命周期
-        lifecycle_entry = None
-        if self.config.debug and not self.config.debug_verbose:
-            lifecycle_entry = {
-                "request_id": request_id,
-                "round": round_num,
-                "session_id": session_id,
-                "turn_index": turn_index,
-                "created_at": time.time(),
-                "input_tokens": count_tokens(user_text),
-                "context_tokens": sum(count_tokens(msg["content"]) for msg in messages),
-            }
-            # 如果有pending时间，记录
-            if semaphore_wait_start:
-                lifecycle_entry["pending_duration"] = time.time() - semaphore_wait_start
-
         try:
             start_time = time.time()
-            if lifecycle_entry:
-                lifecycle_entry["request_sent_at"] = start_time
 
             first_token_received = False
             last_token_time = start_time
@@ -164,9 +128,6 @@ class OpenAIClient:
                                     if not first_token_received:
                                         metrics.time_to_first_token = current_time - start_time
                                         first_token_received = True
-                                        # 记录首token时间到生命周期
-                                        if lifecycle_entry:
-                                            lifecycle_entry["first_token_at"] = current_time
                                     else:
                                         itl = (current_time - last_token_time) * 1000
                                         metrics.inter_token_latencies.append(itl)
@@ -185,29 +146,12 @@ class OpenAIClient:
             if metrics.output_tokens > 0 and metrics.total_latency > 0:
                 metrics.throughput = metrics.output_tokens / metrics.total_latency
 
-            # 记录成功完成的生命周期
-            if lifecycle_entry:
-                lifecycle_entry["completed_at"] = end_time
-                lifecycle_entry["output_tokens"] = metrics.output_tokens
-                lifecycle_entry["ttft_ms"] = metrics.time_to_first_token * 1000
-                lifecycle_entry["total_latency_ms"] = metrics.total_latency * 1000
-                lifecycle_entry["throughput"] = metrics.throughput
-                self.debug_entries.append(lifecycle_entry)
-
         except Exception as e:
             error_msg = str(e) if str(e) else type(e).__name__
             metrics.error = error_msg
             print(f"Request {request_id} (round {round_num}) failed: {error_msg}")
 
-            # 记录失败的生命周期
-            if lifecycle_entry:
-                lifecycle_entry["failed_at"] = time.time()
-                lifecycle_entry["error"] = error_msg
-                lifecycle_entry["error_type"] = type(e).__name__
-                self.debug_entries.append(lifecycle_entry)
-
         return metrics
 
     def set_debug_metadata(self, metadata: Dict[str, Any]):
-        if self.config.debug:
-            self.debug_metadata = metadata
+        pass

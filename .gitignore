@@ -22,6 +22,7 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+*.json
 MANIFEST
 
 # Virtual Environment
@@ -34,6 +35,8 @@ bin/
 include/
 lib/
 lib64/
+flake.lock
+flake.nix
 
 # IDE
 .vscode/
@@ -48,7 +51,9 @@ lib64/
 CLAUDE.md
 benchmark_results/
 debug_logs/
+debug_output/
 *.log
+AGENTS.md
 
 # Temporary files
 *.tmp

@@ -45,6 +45,9 @@ class BenchmarkConfig:
     debug_verbose: bool = False
     debug_log_dir: Optional[Path] = None
     max_context_tokens: Optional[int] = None
+    tokenizer_name: Optional[str] = None
+    tokenizer_trust_remote_code: bool = False
+    tokenizer_revision: Optional[str] = None
 
 
 @dataclass
