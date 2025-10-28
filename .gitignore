@@ -30,6 +30,7 @@ venv/
 ENV/
 env/
 .venv/
+.uv_cache/
 pyvenv.cfg
 bin/
 include/

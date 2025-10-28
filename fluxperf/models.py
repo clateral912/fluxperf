@@ -49,6 +49,11 @@ class BenchmarkConfig:
     tokenizer_trust_remote_code: bool = False
     tokenizer_revision: Optional[str] = None
 
+    def __post_init__(self):
+        # verbose 模式隐含启用基础 debug 功能，避免遗漏 debug 标志导致日志不写入
+        if self.debug_verbose and not self.debug:
+            self.debug = True
+
 
 @dataclass
 class RecipeStage:

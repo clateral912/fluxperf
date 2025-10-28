@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fluxperf"
+version = "0.1.0"
+description = "Dual-round benchmarking tool for OpenAI-compatible LLM inference services"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+  {name = "FluxPerf Contributors"}
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Software Development :: Testing",
+  "Topic :: System :: Benchmark"
+]
+dependencies = [
+  "aiohttp>=3.8.0",
+  "pyyaml>=6.0",
+  "tqdm>=4.65.0",
+  "prometheus-client>=0.16.0"
+]
+
+[project.optional-dependencies]
+datasets = [
+  "datasets>=2.14.0"
+]
+
+[project.scripts]
+fluxperf = "fluxperf.cli:main"
+
+[tool.setuptools.packages.find]
+include = [
+  "fluxperf",
+  "fluxperf.*"
+]
+
+[tool.setuptools.package-data]
+"fluxperf" = ["py.typed"]
