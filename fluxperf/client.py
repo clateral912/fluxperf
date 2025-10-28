@@ -68,8 +68,11 @@ class OpenAIClient:
             }
         }
 
-        if self.config.max_output_tokens:
+        if self.config.max_output_tokens is not None:
             payload["max_tokens"] = self.config.max_output_tokens
+
+        if self.config.min_output_tokens is not None:
+            payload["min_tokens"] = self.config.min_output_tokens
 
         # 保存完整请求数据（仅在save_requests时）
         if self.config.save_requests:

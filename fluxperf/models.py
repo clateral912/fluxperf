@@ -29,6 +29,7 @@ class BenchmarkConfig:
     mode: BenchmarkMode = BenchmarkMode.MULTI_TURN
     max_input_length: Optional[int] = None
     max_output_tokens: Optional[int] = None
+    min_output_tokens: Optional[int] = None
     model_name: str = "gpt-3.5-turbo"
     api_key: Optional[str] = None
     timeout: int = 300

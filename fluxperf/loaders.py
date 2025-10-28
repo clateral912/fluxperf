@@ -189,6 +189,7 @@ class RecipeLoader:
             mode=mode,
             max_input_length=g.get('max_input_length'),
             max_output_tokens=g.get('max_output_tokens'),
+            min_output_tokens=g.get('min_output_tokens'),
             model_name=g.get('model', 'gpt-3.5-turbo'),
             api_key=g.get('api_key'),
             timeout=g.get('timeout', 300),

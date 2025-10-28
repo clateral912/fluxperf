@@ -96,6 +96,13 @@ def main():
     )
 
     parser.add_argument(
+        "--min-output-tokens",
+        type=int,
+        default=None,
+        help="Minimum output token count"
+    )
+
+    parser.add_argument(
         "--model",
         type=str,
         default="gpt-3.5-turbo",
@@ -242,6 +249,10 @@ def main():
                 recipe.global_config['max_output_tokens'] = args.max_output_tokens
                 overrides.append(f"max_output_tokens = {args.max_output_tokens}")
 
+            if args.min_output_tokens is not None:
+                recipe.global_config['min_output_tokens'] = args.min_output_tokens
+                overrides.append(f"min_output_tokens = {args.min_output_tokens}")
+
             if args.model != "gpt-3.5-turbo":  # If not default value
                 recipe.global_config['model'] = args.model
                 overrides.append(f"model = {args.model}")
@@ -356,6 +367,7 @@ def main():
         mode=mode,
         max_input_length=args.max_input_length,
         max_output_tokens=args.max_output_tokens,
+        min_output_tokens=args.min_output_tokens,
         model_name=args.model,
         api_key=args.api_key,
         timeout=args.timeout,

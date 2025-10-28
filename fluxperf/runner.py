@@ -521,14 +521,31 @@ class BenchmarkRunner:
                     pbar.update(1)
 
                     if self.config.debug and self.config.debug_verbose:
-                        serialized_messages = [
-                            {"role": msg.get("role", ""), "content": msg.get("content", "")}
-                            for msg in messages
-                        ]
+                        payload_snapshot = {
+                            "model": self.config.model_name,
+                            "messages": [
+                                {"role": msg.get("role", ""), "content": msg.get("content", "")}
+                                for msg in messages
+                            ],
+                            "stream": True
+                        }
+                        if self.config.max_output_tokens is not None:
+                            payload_snapshot["max_tokens"] = self.config.max_output_tokens
+                        if self.config.min_output_tokens is not None:
+                            payload_snapshot["min_tokens"] = self.config.min_output_tokens
+                        payload_snapshot["metadata"] = {
+                            "session_id": session.session_id,
+                            "turn_index": turn_index,
+                            "request_id": request_id
+                        }
+                        if semaphore_wait_start is not None:
+                            payload_snapshot["metadata"]["wait_time_ms"] = (
+                                (result.start_timestamp - semaphore_wait_start) * 1000
+                            )
                         session_turns.append({
                             "turn_index": turn_index,
                             "request_id": request_id,
-                            "messages": serialized_messages,
+                            "request_payload": payload_snapshot,
                             "response": {
                                 "text": result.output_text,
                                 "error": result.error,
