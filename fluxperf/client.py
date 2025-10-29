@@ -137,7 +137,6 @@ class OpenAIClient:
                                 content = delta.get('content', '')
 
                                 if content:
-                                    is_first_chunk = not first_token_received
                                     if not first_token_received:
                                         metrics.time_to_first_token = current_time - start_time
                                         first_token_received = True
@@ -147,37 +146,39 @@ class OpenAIClient:
 
                                     output_chunks.append(content)
                                     last_token_time = current_time
-                                    if self.debug_log_dir:
-                                        await self._append_stream_log(
-                                            metrics,
-                                            chunk,
-                                            semaphore_wait_start,
-                                            first_chunk=is_first_chunk,
-                                            current_output=''.join(output_chunks)
-                                        )
                         except json.JSONDecodeError:
                             continue
 
             end_time = time.time()
+            final_output = ''.join(output_chunks)
             metrics.end_timestamp = end_time
-            metrics.output_text = ''.join(output_chunks)
+            metrics.output_text = final_output
             metrics.output_tokens = count_tokens(metrics.output_text)
             metrics.total_latency = end_time - start_time
 
             if metrics.output_tokens > 0 and metrics.total_latency > 0:
                 metrics.throughput = metrics.output_tokens / metrics.total_latency
 
+            if self.debug_log_dir:
+                await self._append_final_stream_log(
+                    metrics,
+                    output_text=final_output,
+                    semaphore_wait_start=semaphore_wait_start,
+                    start_time=start_time,
+                    end_time=end_time
+                )
+
         except Exception as e:
             error_msg = str(e) if str(e) else type(e).__name__
             metrics.error = error_msg
             if self.debug_log_dir:
-                await self._append_stream_log(
+                await self._append_final_stream_log(
                     metrics,
-                    {"error": error_msg},
-                    semaphore_wait_start,
-                    first_chunk=False,
-                    current_output=''.join(output_chunks),
-                    is_error=True
+                    output_text=''.join(output_chunks),
+                    semaphore_wait_start=semaphore_wait_start,
+                    start_time=start_time,
+                    end_time=time.time(),
+                    error=error_msg
                 )
             print(f"Request {request_id} (round {round_num}) failed: {error_msg}")
 
@@ -195,32 +196,46 @@ class OpenAIClient:
         self.debug_log_dir = log_dir
         self._debug_metadata = metadata
 
-    async def _append_stream_log(
+    async def _append_final_stream_log(
         self,
         metrics: RequestMetrics,
-        chunk: Dict[str, Any],
+        output_text: str,
         semaphore_wait_start: Optional[float],
-        first_chunk: bool,
-        current_output: str,
-        is_error: bool = False
+        start_time: float,
+        end_time: float,
+        error: Optional[str] = None
     ):
         if not self.debug_log_dir:
             return
 
         log_file = self.debug_log_dir / f"{metrics.request_id}.jsonl"
+        elapsed = max(end_time - start_time, 0.0)
+        avg_itl_ms = 0.0
+        if metrics.inter_token_latencies:
+            avg_itl_ms = sum(metrics.inter_token_latencies) / len(metrics.inter_token_latencies)
+
         log_entry = {
             "request_id": metrics.request_id,
             "round": metrics.round_num,
             "session_id": metrics.session_id,
             "turn_index": metrics.turn_index,
             "timestamp": time.time(),
-            "chunk": chunk,
-            "received_text": current_output,
-            "received_tokens": count_tokens(current_output),
+            "stream_position": "final",
             "metadata": self._debug_metadata,
-            "stream_position": "first" if first_chunk else "next",
-            "is_error": is_error
+            "received_text": output_text,
+            "received_tokens": count_tokens(output_text),
+            "metrics": {
+                "ttft_ms": metrics.time_to_first_token * 1000,
+                "avg_itl_ms": avg_itl_ms,
+                "total_latency_ms": elapsed * 1000,
+                "throughput_tokens_per_s": metrics.throughput,
+                "output_tokens": metrics.output_tokens
+            },
+            "is_error": bool(error)
         }
+
+        if error:
+            log_entry["error"] = error
 
         if semaphore_wait_start is not None:
             log_entry["wait_time_ms"] = (metrics.start_timestamp - semaphore_wait_start) * 1000
