@@ -3,6 +3,7 @@ import json
 import os
 import random
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -32,6 +33,7 @@ class BenchmarkRunner:
         self.session_log_dir: Optional[Path] = None
         self._session_log_lock: Optional[asyncio.Lock] = None
         self._session_logs: Dict[str, Dict[str, Any]] = {}
+        self._debug_root_dir: Optional[Path] = None
 
         # Initialize tokenizer if configured
         if config.tokenizer_name:
@@ -47,6 +49,15 @@ class BenchmarkRunner:
             except Exception as e:
                 print(f"Warning: Failed to initialize tokenizer: {e}")
                 print(f"Falling back to simple word count for token estimation")
+
+        if self.config.debug:
+            base_dir = self.config.debug_log_dir or Path("debug_logs")
+            safe_model = (self.config.model_name or "model").replace("/", "_").replace(" ", "_")
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            derived_name = f"{base_dir.name}_{safe_model}_{timestamp}"
+            self._debug_root_dir = base_dir.parent / derived_name
+            self._debug_root_dir.mkdir(parents=True, exist_ok=True)
+            self.config.debug_log_dir = self._debug_root_dir
 
     def _reset_conversation_state(self, sessions: List[SessionData]):
         for session in sessions:
