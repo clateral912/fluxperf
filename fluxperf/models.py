@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from enum import Enum
@@ -49,6 +48,9 @@ class BenchmarkConfig:
     tokenizer_name: Optional[str] = None
     tokenizer_trust_remote_code: bool = False
     tokenizer_revision: Optional[str] = None
+    suite_name: Optional[str] = None
+    stage_name: Optional[str] = None
+    run_timestamp: Optional[str] = None
 
     def __post_init__(self):
         # verbose 模式隐含启用基础 debug 功能，避免遗漏 debug 标志导致日志不写入
@@ -61,7 +63,17 @@ class RecipeStage:
     name: str
     concurrency_levels: List[int]
     num_samples: List[int]
+    dataset: Optional[str] = None
+    max_output_tokens: Optional[int] = None
+    min_output_tokens: Optional[int] = None
     env: Dict[str, str] = field(default_factory=dict)
+    suite_name: Optional[str] = None
+
+
+@dataclass
+class RecipeSuite:
+    name: str
+    stages: List[RecipeStage] = field(default_factory=list)
 
 
 @dataclass
@@ -77,6 +89,7 @@ class Recipe:
     stages: List[RecipeStage]
     mock_server: Optional[Dict[str, Any]] = None
     vllm: Optional[VLLMConfig] = None
+    suites: Optional[List[RecipeSuite]] = None
 
 
 @dataclass

@@ -2,10 +2,11 @@
 """
 Text Dataset Generator - 从纯文本生成FluxPerf可用的数据集
 
-支持三种模式：
+支持四种模式：
 1. 单轮固定长度模式 - 生成指定长度的单轮数据集
 2. 多轮对话模式 - 生成多轮对话数据集，每轮长度可配置
 3. 共享前缀模式 - 生成带有公共前缀的数据集
+4. 多轮对话共享前缀模式 - 每个对话包含公共头和若干用户轮次
 
 支持按字符数或按 token 数生成（使用 --use-tokens 选项）
 支持顺序无重叠切分（使用 --no-overlap 选项）
@@ -445,6 +446,11 @@ def generate_multi_turn_dataset(
                 "id": f"conversation_{conv_idx}",
                 "user_messages": user_messages
             }
+            if use_tokens and tokenizer:
+                entry["turn_token_counts"] = [
+                    count_tokens(msg, tokenizer) for msg in user_messages
+                ]
+                entry["conversation_token_total"] = sum(entry["turn_token_counts"])
             f.write(json.dumps(entry, ensure_ascii=False) + '\n')
 
     print(f"\n[OK] 数据集已生成: {output_file}")
@@ -563,6 +569,224 @@ def generate_common_prefix_dataset(
     print(f"  文件大小: {output_file.stat().st_size / 1024:.2f} KB")
 
 
+def generate_multi_prefix_dataset(
+    corpus: str,
+    num_conversations: int,
+    prefix_length: int,
+    num_turns: int,
+    turn_length: int,
+    output_file: Path,
+    no_overlap: bool = False,
+    use_tokens: bool = False,
+    tokenizer = None
+):
+    """
+    模式4: 生成多轮对话共享前缀数据集
+
+    Args:
+        corpus: 文本语料库
+        num_conversations: 对话数量
+        prefix_length: 每个对话公共头长度（字符数或 token 数）
+        num_turns: 每个对话的用户轮次数
+        turn_length: 每轮的长度（字符数或 token 数）
+        output_file: 输出文件路径
+        use_tokens: 是否按 token 数生成
+        tokenizer: tokenizer 对象
+    """
+    print(f"\n{'='*60}")
+    print(f"模式4: 生成多轮对话共享前缀数据集")
+    print(f"{'='*60}")
+    print(f"对话数: {num_conversations}")
+    unit = "tokens" if use_tokens else "字符"
+    print(f"公共头长度: {prefix_length} {unit}")
+    print(f"每对话轮次: {num_turns}")
+    print(f"每轮长度: {turn_length} {unit}")
+
+    if num_turns <= 0:
+        print(f"[ERROR] 错误: 轮次数必须大于 0")
+        sys.exit(1)
+
+    if num_conversations <= 0:
+        print(f"[ERROR] 错误: 对话数量必须大于 0")
+        sys.exit(1)
+    if prefix_length <= 0:
+        print(f"[ERROR] 错误: 公共头长度必须大于 0")
+        sys.exit(1)
+    if turn_length <= 0:
+        print(f"[ERROR] 错误: 每轮长度必须大于 0")
+        sys.exit(1)
+
+    entries: List[List[str]] = []
+    global_prefix_text: Optional[str] = None
+
+    def attach_prefix_to_first_turn(turns: List[str], prefix_text: str) -> List[str]:
+        """返回附带前缀的对话轮次，只有首轮拼接前缀"""
+        if not turns or not prefix_text:
+            return turns
+        first = turns[0]
+        if first.startswith(prefix_text):
+            return turns
+        updated = turns.copy()
+        updated[0] = prefix_text + updated[0]
+        return updated
+
+    if no_overlap:
+        if use_tokens:
+            print(f"[INFO] 正在 tokenize 语料库...")
+            corpus_tokens = tokenizer.encode(corpus, add_special_tokens=False)
+            total_tokens = len(corpus_tokens)
+            print(f"[OK] 语料库共有 {total_tokens:,} tokens")
+
+            tokens_per_conversation = prefix_length + num_turns * turn_length
+            if tokens_per_conversation > total_tokens:
+                print(f"[WARNING] 警告: 单个对话所需 token ({tokens_per_conversation}) 超过语料库总 token ({total_tokens})")
+                print(f"  无法生成多轮公共头数据集")
+                tokens_per_conversation = total_tokens + 1  # 阻止生成
+
+            max_conversations = total_tokens // tokens_per_conversation if tokens_per_conversation > 0 else 0
+            actual_total = min(num_conversations, max_conversations)
+            if actual_total < num_conversations:
+                print(f"[WARNING] 警告: 可生成的对话数不足（请求 {num_conversations}，可生成 {actual_total}）")
+
+            if actual_total <= 0:
+                print(f"[ERROR] 无法生成任何对话，请检查参数与语料库长度")
+                sys.exit(1)
+
+            remaining_tokens = total_tokens - tokens_per_conversation * actual_total
+            start_token = random.randint(0, remaining_tokens) if remaining_tokens > 0 else 0
+
+            for conv_idx in range(actual_total):
+                base = start_token + conv_idx * tokens_per_conversation
+                prefix_tokens = corpus_tokens[base:base + prefix_length]
+                if len(prefix_tokens) < prefix_length:
+                    print(f"[WARNING] 警告: 对话 {conv_idx} 公共头 token 不足，停止生成")
+                    break
+                prefix_text = tokenizer.decode(prefix_tokens, skip_special_tokens=True)
+                if global_prefix_text is None:
+                    global_prefix_text = prefix_text
+
+                turns: List[str] = []
+                for turn_idx in range(num_turns):
+                    turn_start = base + prefix_length + turn_idx * turn_length
+                    turn_tokens = corpus_tokens[turn_start:turn_start + turn_length]
+                    if len(turn_tokens) < turn_length:
+                        print(f"[WARNING] 警告: 对话 {conv_idx} 第 {turn_idx} 轮 token 不足，停止生成")
+                        turns = []
+                        break
+                    turn_text = tokenizer.decode(turn_tokens, skip_special_tokens=True)
+                    turns.append(turn_text)
+
+                if len(turns) != num_turns:
+                    break
+                prefix_for_conv = global_prefix_text or prefix_text
+                turns = attach_prefix_to_first_turn(turns, prefix_for_conv)
+                entries.append(turns)
+        else:
+            corpus_length = len(corpus)
+            chars_per_conversation = prefix_length + num_turns * turn_length
+            if chars_per_conversation > corpus_length:
+                print(f"[WARNING] 警告: 单个对话所需字符 ({chars_per_conversation}) 超过语料库总字符 ({corpus_length})")
+                print(f"  无法生成多轮公共头数据集")
+                chars_per_conversation = corpus_length + 1
+
+            max_conversations = corpus_length // chars_per_conversation if chars_per_conversation > 0 else 0
+            actual_total = min(num_conversations, max_conversations)
+            if actual_total < num_conversations:
+                print(f"[WARNING] 警告: 可生成的对话数不足（请求 {num_conversations}，可生成 {actual_total}）")
+
+            if actual_total <= 0:
+                print(f"[ERROR] 无法生成任何对话，请检查参数与语料库长度")
+                sys.exit(1)
+
+            remaining_chars = corpus_length - chars_per_conversation * actual_total
+            start_offset = random.randint(0, remaining_chars) if remaining_chars > 0 else 0
+
+            for conv_idx in range(actual_total):
+                base = start_offset + conv_idx * chars_per_conversation
+                prefix = corpus[base:base + prefix_length]
+                if len(prefix) < prefix_length:
+                    print(f"[WARNING] 警告: 对话 {conv_idx} 公共头字符不足，停止生成")
+                    break
+                if global_prefix_text is None:
+                    global_prefix_text = prefix
+
+                turns: List[str] = []
+                for turn_idx in range(num_turns):
+                    turn_start = base + prefix_length + turn_idx * turn_length
+                    turn = corpus[turn_start:turn_start + turn_length]
+                    if len(turn) < turn_length:
+                        print(f"[WARNING] 警告: 对话 {conv_idx} 第 {turn_idx} 轮字符不足，停止生成")
+                        turns = []
+                        break
+                    turns.append(turn)
+
+                if len(turns) != num_turns:
+                    break
+                prefix_for_conv = global_prefix_text or prefix
+                turns = attach_prefix_to_first_turn(turns, prefix_for_conv)
+                entries.append(turns)
+    else:
+        prefixes = sample_text_segments(
+            corpus,
+            1,
+            prefix_length,
+            no_overlap=no_overlap,
+            use_tokens=use_tokens,
+            tokenizer=tokenizer
+        )
+        if not prefixes:
+            print(f"[ERROR] 未能采样到任何公共前缀，请检查输入参数")
+            sys.exit(1)
+        global_prefix_text = prefixes[0]
+        total_segments_needed = num_conversations * num_turns
+        flat_turn_segments = sample_text_segments(
+            corpus,
+            total_segments_needed,
+            turn_length,
+            no_overlap=no_overlap,
+            use_tokens=use_tokens,
+            tokenizer=tokenizer
+        )
+
+        for conv_idx in range(num_conversations):
+            start = conv_idx * num_turns
+            end = start + num_turns
+            if end > len(flat_turn_segments):
+                break
+            turns = flat_turn_segments[start:end]
+            if len(turns) != num_turns:
+                break
+            turns = attach_prefix_to_first_turn(turns, global_prefix_text)
+            entries.append(turns)
+
+    actual_conversations = len(entries)
+
+    if actual_conversations == 0:
+        print(f"[ERROR] 未生成任何对话，请调整参数后重试")
+        sys.exit(1)
+
+    if global_prefix_text is None:
+        print(f"[ERROR] 未设置公共前缀，生成流程异常")
+        sys.exit(1)
+
+    with open(output_file, 'w', encoding='utf-8') as f:
+        for conv_idx, turns in enumerate(entries):
+            entry = {
+                "id": f"multi_prefix_{conv_idx}",
+                "prefix": global_prefix_text,
+                "user_messages": turns
+            }
+            if use_tokens and tokenizer:
+                entry["prefix_token_count"] = count_tokens(global_prefix_text, tokenizer)
+                entry["turn_token_counts"] = [count_tokens(turn, tokenizer) for turn in turns]
+                entry["conversation_token_total"] = sum(entry["turn_token_counts"])
+            f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+
+    print(f"\n[OK] 数据集已生成: {output_file}")
+    print(f"  总对话数: {actual_conversations}")
+    print(f"  文件大小: {output_file.stat().st_size / 1024:.2f} KB")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="从纯文本生成FluxPerf可用的JSONL数据集",
@@ -594,7 +818,17 @@ def main():
      --mode prefix \\
      --num-entries 200 \\
      --total-length 2000 \\
-     --prefix-length 1000
+      --prefix-length 1000
+
+4. 生成多轮共享前缀对话:
+   python text_dataset_generator.py \\
+     --input corpus.txt \\
+     --output multi_prefix.jsonl \\
+     --mode multi-prefix \\
+     --num-conversations 100 \\
+     --prefix-length 200 \\
+     --num-turns 5 \\
+     --turn-length 300
         """
     )
 
@@ -615,9 +849,9 @@ def main():
     parser.add_argument(
         '--mode',
         type=str,
-        choices=['single', 'multi', 'prefix'],
+        choices=['single', 'multi', 'prefix', 'multi-prefix'],
         required=True,
-        help='生成模式: single(单轮), multi(多轮), prefix(共享前缀)'
+        help='生成模式: single(单轮), multi(多轮), prefix(共享前缀), multi-prefix(多轮公共头)'
     )
 
     # 模式1参数
@@ -637,19 +871,19 @@ def main():
     parser.add_argument(
         '--num-conversations',
         type=int,
-        help='[模式2] 对话数量'
+        help='[模式2/4] 对话数量'
     )
 
     parser.add_argument(
         '--num-turns',
         type=int,
-        help='[模式2] 每个对话的轮次'
+        help='[模式2/4] 每个对话的轮次'
     )
 
     parser.add_argument(
         '--turn-length',
         type=int,
-        help='[模式2] 每轮的长度（字符数）'
+        help='[模式2/4] 每轮的长度（字符数）'
     )
 
     # 模式3参数
@@ -662,7 +896,7 @@ def main():
     parser.add_argument(
         '--prefix-length',
         type=int,
-        help='[模式3] 公共前缀的长度（字符数）'
+        help='[模式3/4] 公共前缀的长度（字符数）'
     )
 
     parser.add_argument(
@@ -750,6 +984,20 @@ def main():
             args.num_entries,
             args.total_length,
             args.prefix_length,
+            args.output,
+            no_overlap=args.no_overlap,
+            use_tokens=args.use_tokens,
+            tokenizer=tokenizer
+        )
+    elif args.mode == 'multi-prefix':
+        if not args.num_conversations or not args.prefix_length or not args.num_turns or not args.turn_length:
+            parser.error("模式4需要 --num-conversations, --prefix-length, --num-turns, 和 --turn-length 参数")
+        generate_multi_prefix_dataset(
+            corpus,
+            args.num_conversations,
+            args.prefix_length,
+            args.num_turns,
+            args.turn_length,
             args.output,
             no_overlap=args.no_overlap,
             use_tokens=args.use_tokens,

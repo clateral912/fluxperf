@@ -51,12 +51,16 @@ class BenchmarkRunner:
                 print(f"Falling back to simple word count for token estimation")
 
         if self.config.debug:
-            base_dir = self.config.debug_log_dir or Path("debug_logs")
+            suite_part = (self.config.suite_name or "suite").replace("/", "_").replace(" ", "_")
+            stage_part = (self.config.stage_name or "stage").replace("/", "_").replace(" ", "_")
             safe_model = (self.config.model_name or "model").replace("/", "_").replace(" ", "_")
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            derived_name = f"{base_dir.name}_{safe_model}_{timestamp}"
-            self._debug_root_dir = base_dir.parent / derived_name
-            self._debug_root_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = self.config.run_timestamp or datetime.now().strftime("%Y%m%d-%H%M%S")
+
+            base_dir = self.config.debug_log_dir or Path("debug_logs")
+            run_dir = base_dir / suite_part / stage_part / f"{safe_model}_{timestamp}"
+
+            run_dir.mkdir(parents=True, exist_ok=True)
+            self._debug_root_dir = run_dir
             self.config.debug_log_dir = self._debug_root_dir
 
     def _reset_conversation_state(self, sessions: List[SessionData]):
@@ -424,7 +428,14 @@ class BenchmarkRunner:
             debug=self.config.debug,
             debug_verbose=self.config.debug_verbose,
             debug_log_dir=self.config.debug_log_dir,
-            max_context_tokens=self.config.max_context_tokens
+            max_context_tokens=self.config.max_context_tokens,
+            tokenizer_name=self.config.tokenizer_name,
+            tokenizer_trust_remote_code=self.config.tokenizer_trust_remote_code,
+            tokenizer_revision=self.config.tokenizer_revision,
+            min_output_tokens=self.config.min_output_tokens,
+            suite_name=self.config.suite_name,
+            stage_name=self.config.stage_name,
+            run_timestamp=self.config.run_timestamp
         )
 
         prometheus_metrics = {}
@@ -715,68 +726,88 @@ async def run_recipe_benchmark(recipe: Recipe):
         if not recipe.global_config.get('endpoint'):
             recipe.global_config['endpoint'] = f"http://{host}:{port}/v1/chat/completions"
     
-    all_stage_results = {}
-    
-    try:
-        for stage_idx, stage in enumerate(recipe.stages, 1):
-            print(f"\n{'='*60}")
-            print(f"Stage {stage_idx}/{len(recipe.stages)}: {stage.name}")
-            print(f"{'='*60}")
-            
-            # Save current environment variables
-            original_env = {}
-            for key, value in stage.env.items():
-                original_env[key] = os.environ.get(key)
-                os.environ[key] = str(value)
-                print(f"Set environment variable: {key}={value}")
-            
-            try:
-                # Create configuration
-                config = RecipeLoader.create_config_from_recipe(recipe, stage)
-                
-                # Load SLO
-                slo = None
-                if config.slo_file:
-                    slo = SLOLoader.load_slo(config.slo_file)
-                
-                # Print configuration information
-                print(f"\nDataset: {config.dataset_path}")
-                print(f"Endpoint: {config.endpoint_url}")
-                print(f"Mode: {config.mode.value}")
-                print(f"Concurrency levels: {', '.join(map(str, config.concurrency_levels))}")
-                print(f"Samples: {', '.join(map(str, config.num_samples))}")
-                print(f"Model: {config.model_name}\n")
-                
-                # Run test
-                runner = BenchmarkRunner(config, slo)
-                stage_results = await runner.run()
-                
-                all_stage_results[f"stage_{stage_idx}_{stage.name}"] = stage_results
-                
-                # Analyze and print results
-                from .analyzer import MetricsAnalyzer
-                for concurrency, (round1_results, round2_results, round1_prom, round2_prom) in stage_results.items():
-                    round1_metrics = MetricsAnalyzer.analyze_round(1, round1_results, round1_prom, stage.name, concurrency)
-                    MetricsAnalyzer.print_metrics(concurrency, round1_metrics)
+    suites = recipe.suites or []
+    total_stages = sum(len(suite.stages) for suite in suites) if suites else len(recipe.stages)
+    global_stage_index = 0
 
-                    # Multi-turn mode only runs one round, don't print second round
-                    if config.mode == BenchmarkMode.DUAL_ROUND and round2_results:
-                        round2_metrics = MetricsAnalyzer.analyze_round(2, round2_results, round2_prom, stage.name, concurrency)
-                        MetricsAnalyzer.print_metrics(concurrency, round2_metrics)
-                
-            finally:
-                # Restore environment variables
-                for key, original_value in original_env.items():
-                    if original_value is None:
-                        os.environ.pop(key, None)
-                    else:
-                        os.environ[key] = original_value
-                print(f"\nEnvironment variables restored")
-        
+    all_stage_results: Dict[str, Dict[str, Any]] = {}
+
+    try:
+        suites_to_run = suites if suites else [RecipeSuite(name="Default Suite", stages=recipe.stages)]
+
+        for suite_idx, suite in enumerate(suites_to_run, 1):
+            print(f"\n{'#'*60}")
+            print(f"Suite {suite_idx}/{len(suites_to_run)}: {suite.name}")
+            print(f"{'#'*60}")
+
+            suite_results: Dict[str, Any] = {}
+
+            for stage_idx, stage in enumerate(suite.stages, 1):
+                global_stage_index += 1
+                print(f"\n{'='*60}")
+                print(f"Stage {stage_idx}/{len(suite.stages)} in Suite '{suite.name}' (Global {global_stage_index}/{total_stages}): {stage.name}")
+                print(f"{'='*60}")
+
+                # Save current environment variables
+                original_env = {}
+                for key, value in stage.env.items():
+                    original_env[key] = os.environ.get(key)
+                    os.environ[key] = str(value)
+                    print(f"Set environment variable: {key}={value}")
+
+                try:
+                    # Create configuration
+                    config = RecipeLoader.create_config_from_recipe(recipe, stage)
+
+                    # Load SLO
+                    slo = None
+                    if config.slo_file:
+                        slo = SLOLoader.load_slo(config.slo_file)
+
+                    # Print configuration information
+                    print(f"\nDataset: {config.dataset_path}")
+                    print(f"Endpoint: {config.endpoint_url}")
+                    print(f"Mode: {config.mode.value}")
+                    print(f"Concurrency levels: {', '.join(map(str, config.concurrency_levels))}")
+                    print(f"Samples: {', '.join(map(str, config.num_samples))}")
+                    if config.max_output_tokens is not None:
+                        print(f"Max output tokens: {config.max_output_tokens}")
+                    if config.min_output_tokens is not None:
+                        print(f"Min output tokens: {config.min_output_tokens}")
+                    print(f"Model: {config.model_name}\n")
+
+                    # Run test
+                    runner = BenchmarkRunner(config, slo)
+                    stage_results = await runner.run()
+
+                    suite_results[stage.name] = stage_results
+
+                    # Analyze and print results
+                    from .analyzer import MetricsAnalyzer
+                    for concurrency, (round1_results, round2_results, round1_prom, round2_prom) in stage_results.items():
+                        round1_metrics = MetricsAnalyzer.analyze_round(1, round1_results, round1_prom, stage.name, concurrency)
+                        MetricsAnalyzer.print_metrics(concurrency, round1_metrics)
+
+                        # Multi-turn mode only runs one round, don't print second round
+                        if config.mode == BenchmarkMode.DUAL_ROUND and round2_results:
+                            round2_metrics = MetricsAnalyzer.analyze_round(2, round2_results, round2_prom, stage.name, concurrency)
+                            MetricsAnalyzer.print_metrics(concurrency, round2_metrics)
+
+                finally:
+                    # Restore environment variables
+                    for key, original_value in original_env.items():
+                        if original_value is None:
+                            os.environ.pop(key, None)
+                        else:
+                            os.environ[key] = original_value
+                    print(f"\nEnvironment variables restored")
+
+            all_stage_results[suite.name] = suite_results
+
         print(f"\n{'='*60}")
-        print(f"All {len(recipe.stages)} stages completed!")
+        print(f"All {total_stages} stages across {len(suites_to_run)} suites completed!")
         print(f"{'='*60}")
-        
+
     finally:
         # Close Mock Server
         if mock_task and shutdown_event:

@@ -53,6 +53,7 @@ CLAUDE.md
 benchmark_results/
 debug_logs/
 debug_output/
+tokenizers/
 *.log
 AGENTS.md
 

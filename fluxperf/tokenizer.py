@@ -27,7 +27,24 @@ def initialize_tokenizer(
     if revision:
         kwargs["revision"] = revision
 
-    _tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, **kwargs)
+    try:
+        # Prefer fast tokenizers for performance when available.
+        _tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, **kwargs)
+    except Exception as fast_exc:
+        # Some vendor drops only provide a slow SentencePiece model; retry with use_fast disabled.
+        fallback_kwargs = dict(kwargs)
+        fallback_kwargs["use_fast"] = False
+        try:
+            _tokenizer = AutoTokenizer.from_pretrained(tokenizer_name, **fallback_kwargs)
+        except Exception as slow_exc:
+            raise RuntimeError(
+                f"Failed to initialize tokenizer '{tokenizer_name}' with fast and slow loaders"
+            ) from slow_exc
+        else:
+            # Preserve original context in logs for easier debugging.
+            print(
+                f"Warning: fast tokenizer load failed for '{tokenizer_name}', falling back to slow implementation: {fast_exc}"
+            )
 
 
 def _get_tokenizer():

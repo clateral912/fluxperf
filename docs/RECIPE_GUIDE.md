@@ -67,21 +67,34 @@ mock_server:
   host: "127.0.0.1"
   port: 8765
 
-# Test stages
-stages:
-  - name: "Stage 1: Low Concurrency"
-    env:
-      CUDA_VISIBLE_DEVICES: "0"
-      CUSTOM_VAR: "value1"
-    concurrency_levels: [2, 4]
-    num_samples: [4, 8]
+# Test suites
+suites:
+  - name: "Warm-up"
+    stages:
+      - name: "Stage 1: Low Concurrency"
+        env:
+          CUDA_VISIBLE_DEVICES: "0"
+          CUSTOM_VAR: "value1"
+        concurrency_levels: [2, 4]
+        num_samples: [4, 8]
+        dataset: "datasets/sharegpt_warmup.jsonl"
+        max_output_tokens: 1024
+        min_output_tokens: 32
+
+      - name: "Stage 2: High Concurrency"
+        env:
+          CUDA_VISIBLE_DEVICES: "0,1"
+          CUSTOM_VAR: "value2"
+        concurrency_levels: [8, 16]
+        num_samples: [16, 32]
+        max_output_tokens: 2048
+        min_output_tokens: 64
   
-  - name: "Stage 2: High Concurrency"
-    env:
-      CUDA_VISIBLE_DEVICES: "0,1"
-      CUSTOM_VAR: "value2"
-    concurrency_levels: [8, 16]
-    num_samples: [16, 32]
+  - name: "Stress"
+    stages:
+      - name: "Stage 3: Burst"
+        concurrency_levels: [32, 48]
+        num_samples: [64, 96]
 ```
 
 ## Usage
@@ -141,6 +154,9 @@ python fluxperf.py \
 | `name` | string | No | Stage name |
 | `concurrency_levels` | list[int] | Yes | Concurrency level list |
 | `num_samples` | list[int] | Yes | Sample count for each concurrency level |
+| `dataset` | string | No | Override dataset for the stage |
+| `max_output_tokens` | int | No | Override maximum output tokens |
+| `min_output_tokens` | int | No | Override minimum output tokens |
 | `env` | dict | No | Environment variable key-value pairs |
 
 ## Example Recipes

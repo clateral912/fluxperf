@@ -198,7 +198,7 @@ Ensure you're using the `--recipe` parameter rather than command-line parameters
 
 ### Print All Environment Variables
 
-Add to the stage loop in `run_recipe_benchmark` function:
+Add to the stage loop in `run_recipe_benchmark` function (现在在套件结构内处理 stage):
 
 ```python
 print("\nCurrent environment variables:")

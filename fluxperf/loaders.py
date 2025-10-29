@@ -1,5 +1,6 @@
 import json
 import random
+from datetime import datetime
 from pathlib import Path
 from statistics import mean
 from typing import Any, Dict, List, Optional
@@ -11,6 +12,7 @@ from .models import (
     BenchmarkMode,
     Recipe,
     RecipeStage,
+    RecipeSuite,
     RequestMetrics,
     SLOConstraints,
 )
@@ -127,41 +129,81 @@ class RecipeLoader:
         if not isinstance(global_config, dict):
             raise ValueError("Recipe file format error: 'global' must be a dictionary")
         
-        stages_data = data.get('stages', [])
-        if not isinstance(stages_data, list):
-            raise ValueError("Recipe file format error: 'stages' must be a list")
-        
-        stages = []
-        for idx, stage_data in enumerate(stages_data):
-            if not isinstance(stage_data, dict):
-                raise ValueError(f"Recipe file format error: stage {idx} must be a dictionary")
-            
-            name = stage_data.get('name', f'Stage {idx + 1}')
-            concurrency_levels = stage_data.get('concurrency_levels', [])
-            num_samples = stage_data.get('num_samples', [])
-            env = stage_data.get('env', {})
-            
-            if not isinstance(concurrency_levels, list):
-                raise ValueError(f"Recipe file format error: concurrency_levels in stage '{name}' must be a list")
-            if not isinstance(num_samples, list):
-                raise ValueError(f"Recipe file format error: num_samples in stage '{name}' must be a list")
-            if not isinstance(env, dict):
-                raise ValueError(f"Recipe file format error: env in stage '{name}' must be a dictionary")
-            
-            stages.append(RecipeStage(
-                name=name,
-                concurrency_levels=concurrency_levels,
-                num_samples=num_samples,
-                env=env
-            ))
-        
+        suites_data = data.get('suites')
+        raw_stages = data.get('stages') if suites_data is None else None
+
+        suites: List[RecipeSuite] = []
+        stages: List[RecipeStage] = []
+
+        if suites_data is not None:
+            if not isinstance(suites_data, list):
+                raise ValueError("Recipe file format error: 'suites' must be a list")
+            for suite_idx, suite_data in enumerate(suites_data):
+                if not isinstance(suite_data, dict):
+                    raise ValueError(f"Recipe file format error: suite {suite_idx} must be a dictionary")
+                suite_name = suite_data.get('name', f'Suite {suite_idx + 1}')
+                stages_data = suite_data.get('stages', [])
+                if not isinstance(stages_data, list):
+                    raise ValueError(f"Recipe file format error: 'stages' in suite '{suite_name}' must be a list")
+
+                suite_stages: List[RecipeStage] = []
+                for stage_idx, stage_data in enumerate(stages_data):
+                    stage = RecipeLoader._parse_stage(stage_data, stage_idx, suite_name)
+                    suite_stages.append(stage)
+                    stages.append(stage)
+
+                suites.append(RecipeSuite(name=suite_name, stages=suite_stages))
+        else:
+            stages_data = raw_stages or []
+            if not isinstance(stages_data, list):
+                raise ValueError("Recipe file format error: 'stages' must be a list")
+            default_suite = RecipeSuite(name="Default Suite")
+            for stage_idx, stage_data in enumerate(stages_data):
+                stage = RecipeLoader._parse_stage(stage_data, stage_idx, default_suite.name)
+                default_suite.stages.append(stage)
+                stages.append(stage)
+            suites.append(default_suite)
+
         mock_server = data.get('mock_server')
-        
+
         return Recipe(
             global_config=global_config,
             stages=stages,
-            mock_server=mock_server
+            mock_server=mock_server,
+            suites=suites if suites else None
         )
+
+    @staticmethod
+    def _parse_stage(stage_data: Any, index: int, suite_name: Optional[str]) -> RecipeStage:
+        if not isinstance(stage_data, dict):
+            raise ValueError(f"Recipe file format error: stage {index} must be a dictionary")
+
+        name = stage_data.get('name', f'Stage {index + 1}')
+        concurrency_levels = stage_data.get('concurrency_levels', [])
+        num_samples = stage_data.get('num_samples', [])
+        env = stage_data.get('env', {})
+        dataset = stage_data.get('dataset')
+        max_output_tokens = stage_data.get('max_output_tokens')
+        min_output_tokens = stage_data.get('min_output_tokens')
+
+        if not isinstance(concurrency_levels, list):
+            raise ValueError(f"Recipe file format error: concurrency_levels in stage '{name}' must be a list")
+        if not isinstance(num_samples, list):
+            raise ValueError(f"Recipe file format error: num_samples in stage '{name}' must be a list")
+        if not isinstance(env, dict):
+            raise ValueError(f"Recipe file format error: env in stage '{name}' must be a dictionary")
+
+        stage = RecipeStage(
+            name=name,
+            concurrency_levels=concurrency_levels,
+            num_samples=num_samples,
+            dataset=dataset,
+            max_output_tokens=max_output_tokens,
+            min_output_tokens=min_output_tokens,
+            env=env,
+            suite_name=suite_name
+        )
+        return stage
     
     @staticmethod
     def create_config_from_recipe(recipe: Recipe, stage: RecipeStage) -> BenchmarkConfig:
@@ -173,14 +215,21 @@ class RecipeLoader:
         except ValueError:
             raise ValueError(f"Unsupported mode: {mode_str}. Supported modes: dual_round, multi_turn")
         
-        dataset_path = Path(g.get('dataset'))
-        if not dataset_path:
+        dataset_value = stage.dataset or g.get('dataset')
+        if not dataset_value:
             raise ValueError("Missing dataset configuration in recipe")
+
+        dataset_path = Path(dataset_value)
         
         endpoint = g.get('endpoint')
         if not endpoint and not (recipe.mock_server and recipe.mock_server.get('enabled')):
             raise ValueError("Missing endpoint configuration in recipe and mock_server is not enabled")
         
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+        max_output_tokens = stage.max_output_tokens if stage.max_output_tokens is not None else g.get('max_output_tokens')
+        min_output_tokens = stage.min_output_tokens if stage.min_output_tokens is not None else g.get('min_output_tokens')
+
         return BenchmarkConfig(
             dataset_path=dataset_path,
             endpoint_url=endpoint or "",
@@ -188,8 +237,8 @@ class RecipeLoader:
             concurrency_levels=stage.concurrency_levels,
             mode=mode,
             max_input_length=g.get('max_input_length'),
-            max_output_tokens=g.get('max_output_tokens'),
-            min_output_tokens=g.get('min_output_tokens'),
+            max_output_tokens=max_output_tokens,
+            min_output_tokens=min_output_tokens,
             model_name=g.get('model', 'gpt-3.5-turbo'),
             api_key=g.get('api_key'),
             timeout=g.get('timeout', 300),
@@ -205,5 +254,11 @@ class RecipeLoader:
             debug=g.get('debug', False),
             debug_verbose=g.get('debug_verbose', False),
             debug_log_dir=Path(g['debug_log_dir']) if g.get('debug_log_dir') else None,
-            max_context_tokens=g.get('max_context_tokens')
+            max_context_tokens=g.get('max_context_tokens'),
+            tokenizer_name=g.get('tokenizer_name'),
+            tokenizer_trust_remote_code=g.get('tokenizer_trust_remote_code', False),
+            tokenizer_revision=g.get('tokenizer_revision'),
+            suite_name=stage.suite_name,
+            stage_name=stage.name,
+            run_timestamp=timestamp
         )

@@ -238,12 +238,20 @@ def test_recipe_loader_validation():
             "endpoint": "http://localhost:8000",
             "mode": "multi_turn"
         },
-        "stages": [
+        "suites": [
             {
-                "name": "Stage 1",
-                "concurrency_levels": [5],
-                "num_samples": [10],
-                "env": {"VAR": "value"}
+                "name": "Suite 1",
+                "stages": [
+                    {
+                        "name": "Stage 1",
+                        "concurrency_levels": [5],
+                        "num_samples": [10],
+                        "env": {"VAR": "value"},
+                        "dataset": "test_stage.jsonl",
+                        "max_output_tokens": 512,
+                        "min_output_tokens": 64
+                    }
+                ]
             }
         ]
     }
@@ -255,15 +263,37 @@ def test_recipe_loader_validation():
     try:
         recipe = RecipeLoader.load_recipe(temp_path)
         assert recipe.global_config["dataset"] == "test.jsonl"
-        assert len(recipe.stages) == 1
-        assert recipe.stages[0].name == "Stage 1"
+        assert recipe.suites is not None
+        assert len(recipe.suites) == 1
+        suite = recipe.suites[0]
+        assert suite.name == "Suite 1"
+        assert len(suite.stages) == 1
+        stage = suite.stages[0]
+        assert stage.name == "Stage 1"
+        assert stage.dataset == "test_stage.jsonl"
+        assert stage.max_output_tokens == 512
+        assert stage.min_output_tokens == 64
         print("  ✓ Valid recipe loaded successfully")
     finally:
         temp_path.unlink()
     
     # 测试无效模式
     try:
-        invalid_recipe = valid_recipe.copy()
+        invalid_recipe = {
+            "global": valid_recipe["global"].copy(),
+            "suites": [
+                {
+                    "name": "Suite 1",
+                    "stages": [
+                        {
+                            "name": "Stage 1",
+                            "concurrency_levels": [5],
+                            "num_samples": [10]
+                        }
+                    ]
+                }
+            ]
+        }
         invalid_recipe["global"]["mode"] = "invalid_mode"
         
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:

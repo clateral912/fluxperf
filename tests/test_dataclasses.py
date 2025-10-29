@@ -16,6 +16,7 @@ from fluxperf import (
     SessionData,
     RecipeStage,
     Recipe,
+    RecipeSuite,
     BenchmarkMode
 )
 
@@ -191,14 +192,22 @@ def test_recipe_stage():
         name="Test Stage",
         concurrency_levels=[5, 10],
         num_samples=[10, 20],
-        env={"CUDA_VISIBLE_DEVICES": "0"}
+        env={"CUDA_VISIBLE_DEVICES": "0"},
+        dataset="ds.jsonl",
+        max_output_tokens=1024,
+        min_output_tokens=64,
+        suite_name="Suite A"
     )
     
     assert stage.name == "Test Stage"
     assert stage.concurrency_levels == [5, 10]
     assert stage.num_samples == [10, 20]
     assert stage.env == {"CUDA_VISIBLE_DEVICES": "0"}
-    
+    assert stage.dataset == "ds.jsonl"
+    assert stage.max_output_tokens == 1024
+    assert stage.min_output_tokens == 64
+    assert stage.suite_name == "Suite A"
+
     # Test empty env
     stage2 = RecipeStage(
         name="Stage 2",
@@ -219,13 +228,18 @@ def test_recipe():
         stages=[
             RecipeStage("Stage 1", [5], [10])
         ],
-        mock_server={"enabled": True, "port": 8765}
+        mock_server={"enabled": True, "port": 8765},
+        suites=[RecipeSuite(name="Suite", stages=[RecipeStage("Stage 1", [5], [10])])]
     )
     
     assert recipe.global_config["dataset"] == "test.jsonl"
     assert len(recipe.stages) == 1
     assert recipe.mock_server["enabled"] is True
-    
+    assert recipe.suites is not None
+    assert len(recipe.suites) == 1
+    assert recipe.suites[0].name == "Suite"
+    assert len(recipe.suites[0].stages) == 1
+
     # Test without mock_server
     recipe2 = Recipe(
         global_config={},
