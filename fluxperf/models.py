@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from enum import Enum
 
+from .tokenizer import count_tokens as tokenizer_count_tokens
+
 
 class BenchmarkMode(Enum):
     DUAL_ROUND = "dual_round"
@@ -179,6 +181,4 @@ class SessionData:
 
 
 def count_tokens(text: str) -> int:
-    if not text:
-        return 0
-    return len(text.strip().split())
+    return tokenizer_count_tokens(text)

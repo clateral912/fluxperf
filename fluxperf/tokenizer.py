@@ -5,6 +5,7 @@ from typing import Optional
 
 
 _tokenizer = None
+_warned_simple_split = False
 
 
 def initialize_tokenizer(
@@ -60,6 +61,15 @@ def count_tokens(text: str) -> int:
 
     tok = _tokenizer
     if tok is None:
+        global _warned_simple_split
+        if not _warned_simple_split:
+            import warnings
+            warnings.warn(
+                "Tokenizer 尚未初始化，正在使用基于空格的token估算；请配置BenchmarkConfig.tokenizer_name以获得准确计数。",
+                RuntimeWarning,
+                stacklevel=2
+            )
+            _warned_simple_split = True
         # Fallback to simple whitespace split
         return len(text.strip().split())
 
