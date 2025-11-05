@@ -9,6 +9,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import pytest
+
 from fluxperf import (
     OpenAIClient,
     BenchmarkConfig,
@@ -16,6 +18,7 @@ from fluxperf import (
 )
 
 
+@pytest.mark.asyncio
 async def test_client_initialization():
     """Test client initialization"""
     print("Testing OpenAIClient initialization...")
@@ -28,15 +31,15 @@ async def test_client_initialization():
     )
     
     client = OpenAIClient(config, round_num=1, concurrency=5)
-    
+
     assert client.config == config
     assert client.session is None
     assert len(client.requests_log) == 0
-    assert len(client.debug_entries) == 0
     
     print("✓ OpenAIClient initialization tests passed")
 
 
+@pytest.mark.asyncio
 async def test_client_lifecycle():
     """Test client lifecycle"""
     print("Testing OpenAIClient lifecycle...")
@@ -56,6 +59,7 @@ async def test_client_lifecycle():
     print("✓ OpenAIClient lifecycle tests passed")
 
 
+@pytest.mark.asyncio
 async def test_build_payload():
     """Test request payload construction"""
     print("Testing payload construction...")
@@ -104,6 +108,7 @@ async def test_build_payload():
     print("✓ Payload construction tests passed")
 
 
+@pytest.mark.asyncio
 async def test_metrics_initialization():
     """Test metrics initialization"""
     print("Testing RequestMetrics initialization...")

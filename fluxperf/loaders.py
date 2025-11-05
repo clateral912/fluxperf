@@ -47,9 +47,16 @@ class DatasetLoader:
     def truncate_text(text: str, max_length: Optional[int]) -> str:
         if max_length is None:
             return text
-        if len(text) > max_length:
+
+        from .tokenizer import TokenizerNotInitializedError, truncate_to_tokens
+
+        # Prefer tokenizer-based truncation; fall back to character slicing if tokenizer missing.
+        try:
+            return truncate_to_tokens(text, max_length)
+        except TokenizerNotInitializedError:
+            if max_length is None:
+                return text
             return text[:max_length]
-        return text
 
     @staticmethod
     def is_multi_turn_entry(entry: Dict[str, Any]) -> bool:
