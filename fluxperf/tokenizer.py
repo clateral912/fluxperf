@@ -4,6 +4,11 @@ import functools
 from typing import Optional
 
 
+class TokenizerNotInitializedError(RuntimeError):
+    """Raised when token-dependent operations are attempted without initialization."""
+    pass
+
+
 _tokenizer = None
 _warned_simple_split = False
 
@@ -13,7 +18,7 @@ def initialize_tokenizer(
     trust_remote_code: bool = False,
     revision: Optional[str] = None
 ):
-    global _tokenizer
+    global _tokenizer, _warned_simple_split
     try:
         from transformers import AutoTokenizer
     except ImportError as exc:
@@ -47,10 +52,19 @@ def initialize_tokenizer(
                 f"Warning: fast tokenizer load failed for '{tokenizer_name}', falling back to slow implementation: {fast_exc}"
             )
 
+    # Reset warning flag and cached whitespace results now that tokenizer is ready.
+    _warned_simple_split = False
+    try:
+        count_tokens.cache_clear()
+    except AttributeError:
+        pass
+
 
 def _get_tokenizer():
     if _tokenizer is None:
-        raise RuntimeError("Tokenizer 尚未初始化，请先调用 initialize_tokenizer")
+        raise TokenizerNotInitializedError(
+            "Tokenizer 尚未初始化，请先调用 initialize_tokenizer"
+        )
     return _tokenizer
 
 
@@ -61,17 +75,9 @@ def count_tokens(text: str) -> int:
 
     tok = _tokenizer
     if tok is None:
-        global _warned_simple_split
-        if not _warned_simple_split:
-            import warnings
-            warnings.warn(
-                "Tokenizer 尚未初始化，正在使用基于空格的token估算；请配置BenchmarkConfig.tokenizer_name以获得准确计数。",
-                RuntimeWarning,
-                stacklevel=2
-            )
-            _warned_simple_split = True
-        # Fallback to simple whitespace split
-        return len(text.strip().split())
+        raise TokenizerNotInitializedError(
+            "Tokenizer 尚未初始化，无法计算 token 数；请先调用 initialize_tokenizer"
+        )
 
     if hasattr(tok, "encode"):
         return len(tok.encode(text, add_special_tokens=False))
@@ -81,4 +87,19 @@ def count_tokens(text: str) -> int:
         if "input_ids" in outputs:
             return len(outputs["input_ids"])
 
-    return len(text.strip().split())
+    raise RuntimeError("Tokenizer 对象不支持 encode/__call__ 接口，无法计算 token 数")
+
+
+def truncate_to_tokens(text: str, max_tokens: Optional[int]) -> str:
+    """Trim a string so that it contains at most `max_tokens` tokens."""
+    if text is None or max_tokens is None:
+        return text
+    if max_tokens <= 0:
+        return ""
+
+    tok = _get_tokenizer()
+    encoded = tok.encode(text, add_special_tokens=False)
+    if len(encoded) <= max_tokens:
+        return text
+    trimmed = tok.decode(encoded[:max_tokens], skip_special_tokens=True)
+    return trimmed
