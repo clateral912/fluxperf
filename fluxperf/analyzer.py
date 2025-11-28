@@ -4,7 +4,7 @@ import math
 from datetime import datetime
 from pathlib import Path
 from statistics import mean, median, stdev
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .models import (
     BenchmarkConfig,
@@ -331,12 +331,11 @@ class MetricsAnalyzer:
             print(f"Goodput: {metrics.goodput_requests} requests ({metrics.goodput_request_rate:.1f}%) | {metrics.goodput_tokens} tokens ({metrics.goodput_token_rate:.1f}%)")
 
     @staticmethod
-    def save_results(
-        all_results: Dict[int, Tuple[RoundMetrics, RoundMetrics, List[RequestMetrics], List[RequestMetrics]]],
-        output_path: Path
-    ):
+    def serialize_results(
+        all_results: Dict[int, Tuple[RoundMetrics, RoundMetrics, List[RequestMetrics], List[RequestMetrics]]]
+    ) -> Dict[str, Any]:
         data = {}
-        
+
         for concurrency, (round1_metrics, round2_metrics, round1_results, round2_results) in all_results.items():
             data[f"concurrency_{concurrency}"] = {
                 "summary": {
@@ -444,10 +443,19 @@ class MetricsAnalyzer:
                     ]
                 }
             }
-        
+
+        return data
+
+    @staticmethod
+    def save_results(
+        all_results: Dict[int, Tuple[RoundMetrics, RoundMetrics, List[RequestMetrics], List[RequestMetrics]]],
+        output_path: Path
+    ):
+        data = MetricsAnalyzer.serialize_results(all_results)
+
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-        
+
         print(f"\nJSON results saved to: {output_path}")
 
     @staticmethod

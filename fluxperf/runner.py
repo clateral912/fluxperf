@@ -17,6 +17,7 @@ from .models import (
     BenchmarkConfig,
     BenchmarkMode,
     Recipe,
+    RecipeSuite,
     RequestMetrics,
     SessionData,
     SLOConstraints,
@@ -780,18 +781,48 @@ async def run_recipe_benchmark(recipe: Recipe):
                     runner = BenchmarkRunner(config, slo)
                     stage_results = await runner.run()
 
-                    suite_results[stage.name] = stage_results
-
-                    # Analyze and print results
                     from .analyzer import MetricsAnalyzer
+                    serialized_stage = {}
+                    stage_metrics_only = {}
                     for concurrency, (round1_results, round2_results, round1_prom, round2_prom) in stage_results.items():
-                        round1_metrics = MetricsAnalyzer.analyze_round(1, round1_results, round1_prom, stage.name, concurrency)
+                        round1_metrics = MetricsAnalyzer.analyze_round(
+                            1,
+                            round1_results,
+                            round1_prom,
+                            stage.name,
+                            concurrency
+                        )
                         MetricsAnalyzer.print_metrics(concurrency, round1_metrics)
 
-                        # Multi-turn mode only runs one round, don't print second round
                         if config.mode == BenchmarkMode.DUAL_ROUND and round2_results:
-                            round2_metrics = MetricsAnalyzer.analyze_round(2, round2_results, round2_prom, stage.name, concurrency)
+                            round2_metrics = MetricsAnalyzer.analyze_round(
+                                2,
+                                round2_results,
+                                round2_prom,
+                                stage.name,
+                                concurrency
+                            )
                             MetricsAnalyzer.print_metrics(concurrency, round2_metrics)
+                        else:
+                            round2_metrics = MetricsAnalyzer.analyze_round(2, [], {}, stage.name, concurrency)
+
+                        serialized_stage[concurrency] = (
+                            round1_metrics,
+                            round2_metrics,
+                            round1_results,
+                            round2_results
+                        )
+                        stage_metrics_only[concurrency] = (
+                            round1_metrics,
+                            round2_metrics
+                        )
+
+                    suite_results[stage.name] = {
+                        "config": config,
+                        "results": stage_results,
+                        "metrics": serialized_stage,
+                        "metrics_only": stage_metrics_only,
+                    }
 
                 finally:
                     # Restore environment variables
@@ -807,6 +838,49 @@ async def run_recipe_benchmark(recipe: Recipe):
         print(f"\n{'='*60}")
         print(f"All {total_stages} stages across {len(suites_to_run)} suites completed!")
         print(f"{'='*60}")
+
+        from .analyzer import MetricsAnalyzer
+
+        aggregated: Dict[str, Any] = {
+            "suites": {},
+        }
+
+        for suite_name, stages in all_stage_results.items():
+            suite_entry = {}
+            aggregated["suites"][suite_name] = suite_entry
+
+            for stage_name, stage_info in stages.items():
+                stage_entry = {}
+                stage_entry["config"] = {
+                    "dataset": str(stage_info["config"].dataset_path),
+                    "endpoint": stage_info["config"].endpoint_url,
+                    "mode": stage_info["config"].mode.value,
+                    "concurrency_levels": stage_info["config"].concurrency_levels,
+                    "num_samples": stage_info["config"].num_samples,
+                    "model": stage_info["config"].model_name,
+                    "max_output_tokens": stage_info["config"].max_output_tokens,
+                    "min_output_tokens": stage_info["config"].min_output_tokens,
+                }
+
+                stage_entry["results"] = MetricsAnalyzer.serialize_results(stage_info["metrics"])
+                suite_entry[stage_name] = stage_entry
+
+        output_path = recipe.global_config.get("output")
+        output_dir = recipe.global_config.get("output_dir", "benchmark_results")
+
+        if output_path:
+            output_file = Path(output_path)
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            output_dir_path = Path(output_dir)
+            output_dir_path.mkdir(parents=True, exist_ok=True)
+            default_name = recipe.global_config.get("output", "benchmark_results.json")
+            output_file = output_dir_path / default_name
+
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(aggregated, f, ensure_ascii=False, indent=2)
+
+        print(f"\nRecipe JSON results saved to: {output_file}")
 
     finally:
         # Close Mock Server
